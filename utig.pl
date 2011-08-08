@@ -60,11 +60,12 @@ use Sys::Hostname;
 use Data::Dumper;
 #use Smart::Comments;
 use Config::Pit;
+use HTML::Entities qw(decode_entities);
 
 use Readonly;
 Readonly my $CHARSET => 'utf8';
 
-our $VERSION = '0.0.1';
+our $VERSION = '0.0.2';
 our $CRLF = "\015\012";
 my  $encode = find_encoding($CHARSET);
 
@@ -235,12 +236,11 @@ sub BUILD {
 			unless ($chan) {
 				$self->need_more_params($handle, 'PRIVMSG');
 			}
-
 			eval { twitter_agent($handle)->update($encode->decode($text)); };
-			unless ($@) {
-			}
-			else {
-				$self->send_msg($handle, RPL_NOTOPIC, $chan, 'send error: ' . $text);
+			if ($@) {
+				my $comment = sprintf("%s!%s@%s", 'twitterircgateway', 'twitterircgateway', $self->servername);
+				my $raw = mk_msg($comment, 'NOTICE', '#twitter', qq|send error: "$text": $@| ) . $CRLF;
+				$handle->push_write($raw);
 			}
 		},
 		notice => sub {
@@ -395,7 +395,7 @@ sub streamer {
 			my $nick = $tweet->{user}{screen_name};
 			return unless $nick and $tweet->{text};
 
-			(my $text = $encode->encode($tweet->{text})) =~ s/[\r\n]+/ /g;
+			(my $text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
 			if (exists $handle->{channels}{'#twitter'} and exists $tweet->{user}{id}) {
 				if (not exists $handle->{channels}{'#twitter'}{$tweet->{user}{id}}) {
 					my $raw = mk_msg($nick, 'JOIN', '#twitter') . $CRLF;
