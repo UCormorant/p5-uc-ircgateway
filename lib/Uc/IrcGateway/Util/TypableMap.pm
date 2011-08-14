@@ -57,8 +57,8 @@ has 'max_size'  => ( is => 'rw', isa => 'Int', lazy_build => 1, trigger => sub {
     else { CORE::splice @{$self->indices}, $value; }
 } );
 
-has 'items'   => ( is => 'ro', isa => 'HashRef', default => sub { return {} } );
-has 'indices' => ( is => 'ro', isa => 'ArrayRef[Str]', lazy_build => 1 );
+has 'items'   => ( is => 'ro', isa => 'HashRef', default => sub { return {} }, init_arg => undef );
+has 'indices' => ( is => 'ro', isa => 'ArrayRef[Str]', lazy_build => 1, init_arg => undef );
 has 'chars'   => ( is => 'ro', isa => 'ArrayRef[Str]', default => sub {
     return \@TYPABLE_MAP if scalar @TYPABLE_MAP;
     local $_;
@@ -178,7 +178,7 @@ sub unshift {
     $self->set(%set);
 }
 sub splice {
-    # TODO: ‚Ğ‚Ç‚¢c‚¢‚Â‚©’¼‚·
+    # TODO: ã²ã©ã„â€¦ã„ã¤ã‹ç›´ã™
 
     my ($self, $offset, $length, @items) = @_;
     my $endset = $offset + $length - 1;

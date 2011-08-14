@@ -1,5 +1,0 @@
-Revision history for Uc-IrcGateway
-
-0.0.1  Tue Aug  9 13:57:42 2011
-       Initial release.
-

@@ -1,20 +1,28 @@
 package Uc::IrcGateway::Util::User;
 
-use warnings;
-use strict;
-use Carp;
+use 5.010;
+use common::sense;
+use warnings qw(utf8);
+use Any::Moose;
 
-use version; $VERSION = qv('0.0.3');
+=ignore
+methods:
+properties:
+options:
 
-# Other recommended modules (uncomment to use):
-#  use IO::Prompt;
-#  use Perl6::Export;
-#  use Perl6::Slurp;
-#  use Perl6::Say;
+=cut
 
+has [qw/nick login realname host addr server/] => ( is => 'rw', isa => 'Maybe[Str]', required => 1 );
+has 'mode' => ( is => 'rw', isa => 'HashRef', default => sub { { o => 0, v => 0, } } );
+has 'away_message' => ( is => 'rw', isa => 'Maybe[Str]' );
+has 'last_modified' => ( is => 'rw', isa => 'Int', default => sub { time } );
 
-# Module implementation here
+__PACKAGE__->meta->make_immutable;
+no Any::Moose;
 
+sub to_prefix {
+    return sprintf "%s!%s@%s", $_[0]->nick, $_[0]->login, $_[0]->host;
+}
 
 1; # Magic true value required at end of module
 __END__
@@ -26,7 +34,7 @@ Uc::IrcGateway::Util::User - [One line description of module's purpose here]
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway::Util::User version 0.0.1
+This document describes Uc::IrcGateway::Util::User
 
 
 =head1 SYNOPSIS

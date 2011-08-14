@@ -1,13 +1,19 @@
 Build.PL
 Changes
+Changes.txt
 lib/Uc/IrcGateway.pm
 lib/Uc/IrcGateway/Twitter.pm
+lib/Uc/IrcGateway/Util/Channel.pm
+lib/Uc/IrcGateway/Util/Connection.pm
 lib/Uc/IrcGateway/Util/TypableMap.pm
 lib/Uc/IrcGateway/Util/User.pm
 Makefile.PL
 MANIFEST			This list of files
+MANIFEST.SKIP
 README
+README.txt
 t/00.load.t
 t/perlcritic.t
 t/pod-coverage.t
 t/pod.t
+utig.pl

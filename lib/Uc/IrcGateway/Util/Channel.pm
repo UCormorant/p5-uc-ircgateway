@@ -1,125 +1,53 @@
-package Uc::IrcGateway;
+package Uc::IrcGateway::Util::Channel;
 
 use 5.010;
 use common::sense;
 use warnings qw(utf8);
-use version; our $VERSION = qv('0.2.0');
+use Any::Moose;
 
-use Any::Moose; # qw(::Util::TypeConstraints);
-use AnyEvent::Socket;
-use AnyEvent::IRC::Util qw(parse_irc_msg mk_msg);
-use Sys::Hostname;
-use Path::Class;
-use Uc::IrcGateway::Util::User;
-use Uc::IrcGateway::Util::Channel;
-use Uc::IrcGateway::Util::Connection;
-use Uc::IrcGateway::Util::TypableMap;
+=ignore
+methods:
+    HASHREF = users()
+    USERS   = get_users( USERID [, USERID, ...] )
+    USERS   = set_users( USERID => USER [, USERID => USER, ...] )
+    USERS   = del_users( USERID [, USERID, ...] )
+    BOOL    = has_user( CHANNAME )
+    USERIDS = user_list()
 
-use Smart::Comments;
+properties:
+    topic -> TOPIC # channel topic
+    mode  -> { MODE => VALUE } # hash of channel mode
 
-BEGIN {
-    no strict 'refs';
-    while (my ($code, $name) = each %AnyEvent::IRC::Util::RFC_NUMCODE_MAP) {
-        *{"${name}"} = sub () { $code };
-    }
-};
+options:
+    topic -> TOPIC # channel topic
+    mode  -> { MODE => VALUE } # hash of channel mode
 
-extends qw/Object::Event Exporter/;
-has 'host' => ( is => 'ro', isa => 'Str', required => 1, default => '127.0.0.1' );
-has 'port' => ( is => 'ro', isa => 'Int', required => 1, default => 6667 );
-has 'servername'  => ( is => 'rw', isa => 'Str', required => 1, default => sub { hostname() } );
-has 'gatewayname' => ( is => 'rw', isa => 'Str', required => 1, default => 'ucircgateway' );
-has 'welcome'    => ( is => 'rw', isa => 'Str', default => 'welcome to my irc server' );
-has 'ctime'      => ( is => 'ro', isa => 'Str', lazy => 1, builder => sub { scalar localtime } );
-has 'motd' => ( is => 'ro', isa => 'Path::Class::File', default => sub { (my $file = $0) =~ s/\.\w+$//; file("$file.txt") } );
+=cut
 
-our $CRLF = "\015\012";
-our @EXPORT = qw(parse_irc_msg mk_msg);
-push @EXPORT, values %AnyEvent::IRC::Util::RFC_NUMCODE_MAP;
+has 'users' => (
+    is => 'ro', traits => ['Hash'], default => sub { {} }, init_arg => undef,
+    isa => 'HashRef[Uc::IrcGateway::Util::User]', handles => {
+        get_users => 'get',
+        set_users => 'set',
+        del_users => 'delete',
+        has_user  => 'defined',
+        user_list => 'keys',
+} );
+has 'topic' => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
+has 'mode' => ( is => 'rw', isa => 'HashRef', default => sub { {
+    s => 0, # Secret mode
+    p => 0, # Private mode
+    i => 0, # allow Invited only
+    n => 0, # canNot comment before join
+    t => 0, # operater Topic
+    m => 0, # operater Message
+    l => 0, # admission Limit
+    k => '',# join Keyword
+    b => '',# Ban user
+} } );
 
 __PACKAGE__->meta->make_immutable;
 no Any::Moose;
-
-sub BUILD {}
-sub run {
-    my $self = shift;
-    $self->ctime;
-    tcp_server $self->host, $self->port, sub {
-        my ($fh, $host, $port) = @_;
-        my $handle = Uc::IrcGateway::Util::Connection->new(fh => $fh,
-            on_error => sub {
-                my $handle = shift;
-                $self->event('on_error', $handle);
-            },
-            on_eof => sub {
-                my $handle = shift;
-                $self->event('on_eof', $handle);
-            },
-        );
-        $handle->on_read(sub { $handle->push_read(line => sub {
-            my ($handle, $line, $eol) = @_;
-            ### $line
-            my $msg = parse_irc_msg($line);
-            ### $msg
-            $self->handle_msg($msg, $handle);
-        }) });
-    }, sub {
-        my ($fh, $host, $port) = @_;
-        say "bound to $host:$port";
-        say $self->welcome();
-    };
-}
-
-sub handle_msg {
-    my ($self, $msg, $handle) = @_;
-    my $event = lc($msg->{command});
-       $event =~ s/^(\d+)$/irc_$1/g;
-    $self->event($event, $msg, $handle);
-}
-
-sub server_comment {
-    my ($self, $nick, $login) = @_;
-    $login = $nick if $login eq '';
-    return sprintf '%s!~%s@%s', $nick, $nick, $self->servername;
-}
-
-sub list {
-    my ($self, $handle, $chans) = @_;
-    my $nick = $handle->self->nick;
-    my $comment = $self->server_comment($self->gatewayname);
-    my $send = sub {
-        my $msg = mk_msg($comment, @_) . $CRLF;
-        $handle->push_write($msg);
-    };
-    $send->(RPL_LISTSTART, $nick, 'Channel', ':Users', 'Name');
-    $chans = join ',', sort keys %{$handle->{channels}} if !$chans;
-    for my $chan (split /,/, $chans) {
-        my $member_count = scalar values %{$handle->{channels}{$chan}};
-        my $topic = $handle->{topics}{$chan};
-        $send->(RPL_LIST, $nick, $chan, $member_count, (":$topic" || ''));
-    }
-    $send->(RPL_LISTEND, $nick, 'END of /List');
-}
-
-sub send_msg {
-    my ($self, $handle, $cmd, @args) = @_;
-    my $msg = mk_msg($self->host, $cmd, $handle->self->nick, @args) . $CRLF;
-    ### $msg
-    $handle->push_write($msg);
-}
-
-sub send_cmt {
-    my ($self, $handle, $cmd, @args) = @_;
-    my $comment = $self->server_comment('twitterircgateway');
-    my $msg = mk_msg($comment, $cmd, $handle->self->nick, @args) . $CRLF;
-    ### $msg
-    $handle->push_write($msg);
-}
-
-sub need_more_params {
-    my ($self, $handle, $cmd) = @_;
-    $self->send_msg($handle, ERR_NEEDMOREPARAMS, $cmd, 'Not enough parameters');
-}
 
 
 1; # Magic true value required at end of module
@@ -127,17 +55,17 @@ __END__
 
 =head1 NAME
 
-Uc::IrcGateway - [One line description of module's purpose here]
+Uc::IrcGateway::Util::Channel - [One line description of module's purpose here]
 
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version 0.1.1
+This document describes Uc::IrcGateway::Util::Channel
 
 
 =head1 SYNOPSIS
 
-    use Uc::IrcGateway;
+    use Uc::IrcGateway::Util::Channel;
 
 =for author to fill in:
     Brief code example(s) here showing commonest usage(s).
@@ -193,7 +121,7 @@ This document describes Uc::IrcGateway version 0.1.1
     that can be set. These descriptions must also include details of any
     configuration language used.
   
-Uc::IrcGateway requires no configuration files or environment variables.
+Uc::IrcGateway::Util::Channel requires no configuration files or environment variables.
 
 
 =head1 DEPENDENCIES
@@ -233,7 +161,7 @@ None reported.
 No bugs have been reported.
 
 Please report any bugs or feature requests to
-C<bug-uc-ircgateway@rt.cpan.org>, or through the web interface at
+C<bug-uc-ircgateway-util-channel@rt.cpan.org>, or through the web interface at
 L<http://rt.cpan.org>.
 
 
