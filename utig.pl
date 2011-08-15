@@ -35,10 +35,10 @@ my $cv = AnyEvent->condvar;
 my $ircd = Uc::IrcGateway::Twitter->new(
     host => $host,
     port => $port,
-    servername => 'localhost',
+    servername => 'utig.pl',
     welcome => 'Welcome to the utig server',
     consumer_key    => '99tP2pSCdf7y0LkEKsMR5w',
-    consumer_secret => 'eJiKJCAGnwolMDLgGaRyStHQvS5RBVCMGMZlAwk',
+    consumer_secret => 'iJiKJCAGnwolMDLgGaRyStHQvS5RBVCMGMZlAwk',
 );
 
 $ircd->run();

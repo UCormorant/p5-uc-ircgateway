@@ -14,7 +14,7 @@ options:
 
 has [qw/nick login realname host addr server/] => ( is => 'rw', isa => 'Maybe[Str]', required => 1 );
 has 'mode' => ( is => 'rw', isa => 'HashRef', default => sub { { o => 0, v => 0, } } );
-has 'away_message' => ( is => 'rw', isa => 'Maybe[Str]' );
+has 'away_message' => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
 has 'last_modified' => ( is => 'rw', isa => 'Int', default => sub { time } );
 
 __PACKAGE__->meta->make_immutable;

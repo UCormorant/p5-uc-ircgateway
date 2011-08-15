@@ -13,6 +13,8 @@ methods:
     CHANNEL   = del_channels( CHANNAME [, CHANNAME, ...] )
     BOOL      = has_channel( CHANNAME )
     CHANNAMES = channel_list()
+    USERS     = all_users()
+    CHANNAMES = who_is_channel( USERID )
 
 properties:
     self     -> Uc::IrcGateway::Util::User # connection's userdata
@@ -25,6 +27,7 @@ options:
 
 extends 'AnyEvent::Handle', any_moose('::Object');
 has 'self' => ( is => 'rw', isa => 'Uc::IrcGateway::Util::User' );
+has 'options' => ( is => 'rw', isa => 'HashRef', default => sub { {} } );
 has 'channels' => (
     is => 'ro', traits => ['Hash'], default => sub { {} }, init_arg => undef,
     isa => 'HashRef[Uc::IrcGateway::Util::Channel]', handles => {
@@ -51,6 +54,24 @@ sub new {
     }
 
     return $self;
+}
+
+sub all_users {
+    my $self = shift;
+    my @all_users; local $_;
+    push @all_users, %{$_->users} for $self->get_channels($self->channel_list);
+    wantarray ? @all_users : scalar @all_users;
+}
+
+sub who_is_channel {
+    my ($self, $nick) = @_;
+    my @channels;
+
+    for my $chan ($self->channel_list) {
+        push @channels, $chan if $self->get_channels($chan)->has_user($nick);
+    }
+
+    wantarray ? @channels : scalar @channels;
 }
 
 1; # Magic true value required at end of module

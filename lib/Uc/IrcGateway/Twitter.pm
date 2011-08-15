@@ -17,100 +17,37 @@ use Smart::Comments;
 use Readonly;
 Readonly my $CHARSET => 'utf8';
 
+our $VERSION = $Uc::IrcGateway::VERSION;
+our $CRLF = "\015\012";
+our %IRC_COMMAND_EVENT = %Uc::IrcGateway::IRC_COMMAND_EVENT;
+my  $encode = find_encoding($CHARSET);
+
 extends 'Uc::IrcGateway';
 has '+port' => ( default => 16668 );
 has '+gatewayname' => ( default => 'twitterircgateway' );
-has 'conf_app' => ( is  => 'rw', isa => 'HashRef', required => 1, default => sub { pit_get('utig.pl'); } );
+has 'conf_app' => ( is  => 'rw', isa => 'HashRef', required => 1 );
 
-__PACKAGE__->meta->make_immutable;
-no Any::Moose;
+override '_event_user' => sub {
+    my ($self, $msg, $handle) = super();
+    return unless $self;
 
-our $VERSION = $Uc::IrcGateway::VERSION;
-our $CRLF = "\015\012";
-my  $encode = find_encoding($CHARSET);
+    my %opt = _opt_parser($handle->self->realname);
+    $handle->options(\%opt);
+    $handle->options->{account} ||= $handle->self->nick;
 
-sub BUILD {
-    my $self = shift;
-    $self->reg_cb(
-        nick => \&nick,
-        user => \&user,
-        join => \&join,
-        part => \&part,
-        topic => \&topic,
-        privmsg => \&privmsg,
-        notice => \&notice,
-        pin => \&pin,
-        list => \&list,
-        who => \&who,
-        quit => \&quit,
-        on_eof => sub {
-            my ($self, $handle) = @_;
-            undef $handle;
-        },
-    );
-}
-
-sub nick {
-    my ($self, $msg, $handle) = @_;
-    my $nick = shift @{$msg->{params}};
-
-    unless ($nick) {
-        $self->need_more_params($handle, 'NICK');
-    }
-
-    $handle->{conf_user} = pit_get("utig.pl.$nick") if $nick;
-}
-
-sub user {
-    my ($self, $msg, $handle) = @_;
-    my ($nick, $host, $server, $realname) = @{$msg->{params}};
-    $handle->self(Uc::IrcGateway::Util::User->new(
-        nick => $nick, login => $nick, realname => $realname,
-        host => $host, addr => '*', server => $server,
-    ));
-
-    $self->send_msg( $handle, RPL_WELCOME, $self->welcome );
-    $self->send_msg( $handle, RPL_YOURHOST, "Your host is @{[ $self->servername ]} [@{[ $self->servername ]}/@{[ $self->port ]}]. @{[ ref $self ]}/$VERSION" );
-    $self->send_msg( $handle, RPL_CREATED, "This server was created ".$self->ctime);
-    $self->send_msg( $handle, RPL_MYINFO, "@{[ $self->servername ]} @{[ ref $self ]}-$VERSION" );
-    if (-e $self->motd) {
-        $self->send_msg( $handle, ERR_NOMOTD, "MOTD File is found" );
-    }
-    else {
-        $self->send_msg( $handle, ERR_NOMOTD, "MOTD File is missing" );
-    }
+    my $conf = $self->servername.'.'.$handle->options->{account};
+    ### $conf
+    $handle->{conf_user} = pit_get( $conf );
 
     $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
-}
+};
 
-sub join {
-    my ($self, $msg, $handle) = @_;
-    my $chans = shift @{$msg->{params}};
-    my $nick = $handle->self->nick;
+override '_event_join' => sub {
+    my ($self, $msg, $handle) = super();
+    return unless $self;
 
-    unless ($chans) {
-        $self->need_more_params($handle, 'JOIN');
-    }
-
-    for my $chan (split /,/, $chans) {
-        my $raw;
-        $handle->set_channels($chan => Uc::IrcGateway::Util::Channel->new) if !$handle->has_channel($chan);
-        $handle->get_channels($chan)->set_users( $handle->{conf_user}{user_id} => $handle->self );
-
-        # sever reply
-        $self->send_msg( $handle, RPL_TOPIC, $chan, $handle->get_channels($chan)->topic || '' );
-        $self->send_msg( $handle, RPL_NAMREPLY, $chan, "duke" ); # TODO
-        $raw = mk_msg($self->servername, 'MODE', $chan, '+o', $nick) . $CRLF;
-        ### $raw
-        $handle->push_write($raw);
-
-        # send join message
-        my $comment = sprintf("%s!%s@%s", $nick, $nick, $self->servername);
-        $raw = mk_msg($comment, 'JOIN', $chan) . $CRLF;
-        ### $raw
-        $handle->push_write($raw);
-
-        if ($chan eq '#twitter') {
+    for my $chan (split /,/, $msg->{params}[0]) {
+        if ($chan eq '#twitter' && $self->check_channel_name( $handle, $chan, joined => 1 )) {
             $self->streamer(
                 handle          => $handle,
                 consumer_key    => $self->conf_app->{consumer_key},
@@ -120,108 +57,78 @@ sub join {
             );
         }
     }
-}
+};
 
-sub part {
-    my ($self, $msg, $handle) = @_;
+override '_event_part' => sub {
+    my ($self, $msg, $handle) = super();
+    return unless $self;
+
     my ($chans, $text) = @{$msg->{params}};
-    my $nick = $handle->self->nick;
-
-    unless ($chans) {
-        $self->need_more_params($handle, 'JOIN');
-    }
 
     for my $chan (split /,/, $chans) {
-        $handle->get_channels($chan)->del_users($handle->{conf_user}{user_id});
-
-        # send part message
-        my $comment = sprintf("%s!%s@%s", $nick, $nick, $self->servername);
-        my $raw = mk_msg($comment, 'PART', $chan, $text) . $CRLF;
-        ### $raw
-        $handle->push_write($raw);
-
-        if ($chan eq '#twitter') {
-            delete $handle->{streamer};
-        }
+        delete $handle->{streamer} if $chan eq '#twitter';
     }
-}
+};
 
-sub topic {
-    my ($self, $msg, $handle) = @_;
-    my ($chan, $topic) = @{$msg->{params}};
-    my $nick = $handle->self->nick;
+override '_event_privmsg' => sub {
+    my ($self, $msg, $handle) = _check_params(@_);
+    return unless $self;
 
-    unless ($chan) {
-        $self->need_more_params($handle, 'TOPIC');
-    }
-
-    if ($topic) {
-        $handle->get_channels($chan)->topic( $topic );
-        $self->send_msg($handle, RPL_TOPIC, $chan, $topic);
-    }
-    else {
-        $self->send_msg($handle, RPL_NOTOPIC, $chan, 'No topic is set');
-    }
-}
-
-sub privmsg {
-    my ($self, $msg, $handle) = @_;
     my ($chan, $text) = @{$msg->{params}};
-    my $nick = $handle->self->nick;
+    return () unless $self->check_channel_name( $handle, $chan, enable => 1 );
 
-    unless ($chan) {
-        $self->need_more_params($handle, 'PRIVMSG');
-    }
+    my $nick = $handle->self->nick;
     eval { $self->twitter_agent($handle)->update($encode->decode($text)); };
     if ($@) {
-        my $comment = sprintf("%s!%s@%s", $self->gatewayname, $self->gatewayname, $self->servername);
-        my $raw = mk_msg($comment, 'NOTICE', '#twitter', qq|send error: "$text": $@| ) . $CRLF;
-        ### $raw
-        $handle->push_write($raw);
+        $self->send_cmd( $handle, $self->daemon, 'NOTICE', '#twitter', qq|send error: "$text": $@| );
     }
-}
+};
 
-sub notice {
-    my ($self, $msg, $handle) = @_;
-    my ($chan, $text) = @{$msg->{params}};
-    my $nick = $handle->self->nick;
-    unless ($chan) {
-        $self->need_more_params($handle, 'NOTICE');
-    }
-    # no reply any message
-}
+sub _event_pin {
+    my ($self, $msg, $handle) = _check_params(@_);
+    my $pin = $msg->{params}[0];
 
-sub pin {
-    my ($self, $msg, $handle) = @_;
-    my $pin = shift @{$msg->{params}};
     $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user}, $pin);
-}
+    my $conf = $self->servername.'.'.$handle->options->{account};
+    pit_set( $conf => $handle->{conf_user} ) if $handle->{nt}{config_updated};
+};
 
-sub list {
-    my ($self, $msg, $handle) = @_;
-    my $chans = shift @{$msg->{params}};
-    my $nick = $handle->self->nick;
-    $self->list($handle, $chans);
-}
-
-sub who {
-    my ($self, $msg, $handle) = @_;
-    my $chans = shift @{$msg->{params}};
-    my $nick = $handle->self->nick;
-    unless ($chans) {
-        $self->need_more_params($handle, 'WHO');
-    }
-    while (my ($k, $v) = each %{$handle->get_channels($chans)->users}) {
-        $self->send_msg( $handle, RPL_WHOREPLY, $chans, $v->login, $v->host, $v->server, $v->nick, "H :1", $v->realname);
-    }
-    $self->send_msg( $handle, RPL_ENDOFWHO, 'END of /WHO List');
-}
-
-sub quit {
+sub _event_quit {
     my ($self, $msg, $handle) = @_;
     undef $handle->{streamer};
     undef $handle;
+};
+
+__PACKAGE__->meta->make_immutable;
+no Any::Moose;
+
+sub BUILDARGS {
+    my ($class, %args) = @_;
+    $args{conf_app} = {
+        consumer_key => $args{consumer_key},
+        consumer_secret => $args{consumer_secret},
+    };
+    return \%args;
 }
+
+sub BUILD {
+    no strict 'refs';
+    my $self = shift;
+    for my $cmd (qw/user join part privmsg pin quit/) {
+        $IRC_COMMAND_EVENT{$cmd} = \&{"_event_$cmd"};
+    }
+    $self->reg_cb( %IRC_COMMAND_EVENT,
+        on_eof => sub {
+            my ($self, $handle) = @_;
+            undef $handle;
+        },
+        on_error => sub {
+            warn "$_[0]";
+        },
+    );
+}
+
+sub _opt_parser { my %opt; $opt{$1} = $2 while $_[0] =~ /(?:(\w+)=(\S+))/g; %opt }
 
 sub twitter_agent {
     my ($self, $handle, $conf_app, $conf_user, $pin) = @_;
@@ -235,17 +142,24 @@ sub twitter_agent {
     $nt->access_token($conf_user->{token});
     $nt->access_token_secret($conf_user->{token_secret});
 
-    if ($pin) {
-        @{$conf_user}{qw/token token_secret user_id screen_name/} = $nt->request_access_token(verifier => $pin);
-        $nt->{config_updated} = 1;
+    eval {
+        if ($pin) {
+            @{$conf_user}{qw/token token_secret user_id screen_name/} = $nt->request_access_token(verifier => $pin);
+            $nt->{config_updated} = 1;
+        }
+        if ($nt->{authorized} = $nt->authorized) {
+            $self->handle_msg(parse_irc_msg('JOIN #twitter'), $handle);
+        }
+        else {
+            $self->send_cmt($handle, 'NOTICE', 'please open the following url and allow this app, then enter /PIN {code}.');
+            $self->send_cmt($handle, 'NOTICE', $nt->get_authorization_url);
+        }
+    };
+    if ($@) {
+        $self->send_msg( $handle, ERR_YOUREBANNEDCREEP, "twitter authorization error: $@" );
     }
-    if ($nt->{authorized} = $nt->authorized()) {
-        $self->handle_msg(parse_irc_msg('JOIN #twitter'), $handle);
-    }
-    else {
-        $self->send_cmt($handle, 'NOTICE', 'please open the following url and allow this app, then enter /PIN {code}.');
-        $self->send_cmt($handle, 'NOTICE', $nt->get_authorization_url());
-    }
+
+    return ();
 }
 
 sub streamer {
@@ -260,9 +174,12 @@ sub streamer {
         %config,
 
         on_connect => sub {
-            my $comment = sprintf("%s!%s@%s", $self->gatewayname, $self->gatewayname, $self->servername);
-            my $raw = mk_msg($comment, 'NOTICE', '#twitter', 'streamer start to read.' ) . $CRLF;
-            $handle->push_write($raw);
+            $handle->{lookup} = {} if not exists $handle->{lookup};
+            $self->send_cmd( $handle, $self->daemon, 'NOTICE', '#twitter', 'streamer start to read.' ); },
+        on_eof     => sub { $self->send_cmd( $handle, $self->daemon, 'NOTICE', '#twitter', 'streamer stop to read.' );  },
+        on_error => sub {
+            warn "error: $_[0]";
+            delete $handle->{streamer};
         },
         on_tweet => sub {
             my $tweet = shift;
@@ -270,48 +187,46 @@ sub streamer {
             my $nick = $tweet->{user}{screen_name};
             return unless $nick and $tweet->{text};
 
+            $tweet->{text}       ||= '';
+            $tweet->{user}{name} ||= '';
+            $tweet->{user}{url}  ||= '';
             (my $text = $encode->encode(decode_entities($tweet->{text})))       =~ s/[\r\n]+/ /g;
             (my $name = $encode->encode(decode_entities($tweet->{user}{name}))) =~ s/[\r\n]+/ /g;
             (my $url  = $encode->encode(decode_entities($tweet->{user}{url})))  =~ s/[\r\n]+/ /g;
             $url =~ s/\s/+/g; $url ||= "http://twitter.com/$nick";
+
             if ($handle->has_channel('#twitter') and defined $real) {
-                if (not $handle->get_channels('#twitter')->has_user($real)) {
-                    my $user = Uc::IrcGateway::Util::User->new(
+                my $oldnick = $handle->{lookup}{$real} || '';
+                my $channel = $handle->get_channels('#twitter');
+
+                my $user;
+                if (!$oldnick || !$channel->has_user($oldnick)) {
+                    $user = Uc::IrcGateway::Util::User->new(
                         nick => $nick, login => $real, realname => $name,
                         host => 'twitter.com', addr => '127.0.0.1', server => $url,
                     );
-                    my $raw = mk_msg($user->to_prefix, 'JOIN', '#twitter') . $CRLF;
-                    ### $raw
-                    $handle->push_write($raw);
-                    $handle->get_channels('#twitter')->set_users($real => $user);
+                    $self->send_cmd( $handle, $user, 'JOIN', '#twitter' );
+                    $channel->set_users($nick => $user);
                 }
-                elsif ((my $oldnick = $handle->get_channels('#twitter')->get_users($real)->nick) ne $nick) {
-                    my $raw = mk_msg($oldnick, 'NICK', $nick) . $CRLF;
-                    ### $raw
-                    $handle->push_write($raw);
-                    $handle->get_channels('#twitter')->get_users($real)->nick($nick);
+                else {
+                    $user = $channel->get_users($oldnick);
+                    if ($oldnick ne $nick) {
+                        $self->send_cmd( $handle, $user, 'NICK', $nick );
+                        $user->nick($nick);
+                    }
                 }
+
                 if ($nick eq $handle->self->nick) {
-                    $handle->get_channels('#twitter')->topic("$text [$tmap]");
+                    $channel->topic("$text [$tmap]");
                     $self->send_msg($handle, RPL_TOPIC, '#twitter', "$text [$tmap]");
                 }
                 else {
-                    my $comment = sprintf("%s!%s@%s", $nick, $nick, $self->servername);
-                    my $raw = mk_msg($comment, 'PRIVMSG', '#twitter', "$text [$tmap]" ) . $CRLF;
-                    # $raw
-                    $handle->push_write($raw);
+                    $self->send_cmd( $handle, $user, 'PRIVMSG', '#twitter', "$text [$tmap]" );
                 }
-                push @TIMELINE, $tweet if defined $tweet;
+
+                $handle->{lookup}{$real} = $nick;
+                push @TIMELINE, $tweet;
             }
-        },
-        on_error => sub {
-            warn "error: $_[0]";
-            #        undef $streamer;
-        },
-        on_eof => sub {
-            my $comment = sprintf("%s!%s@%s", $self->gatewayname, $self->gatewayname, $self->servername);
-            my $raw = mk_msg($comment, 'NOTICE', '#twitter', 'streamer stop to read.' ) . $CRLF;
-            $handle->push_write($raw);
         },
     );
 }
