@@ -54,7 +54,7 @@ has 'max_size'  => ( is => 'rw', isa => 'Int', lazy_build => 1, trigger => sub {
     my ($self, $value) = @_;
     my $max_size = scalar @{$self->indices};
     if ($value > $max_size) { $self->max_size($max_size); }
-    else { CORE::splice @{$self->indices}, $value; }
+    else { CORE::splice @{$self->indices}, 0, $value; }
 } );
 
 has 'items'   => ( is => 'ro', isa => 'HashRef', default => sub { return {} }, init_arg => undef );
@@ -154,7 +154,7 @@ sub push {
     my %set;
     for my $item (@items) {
         $set{$self->tid} = $item;
-        if ($self->index < $self->max_size) {
+        if ($self->index < $self->max_size - 1) {
             $self->index($self->index+1);
         }
         else {
@@ -168,7 +168,7 @@ sub unshift {
     my %set;
     for my $item (@items) {
         $set{$self->tid} = $item;
-        if ($self->index < $self->max_size) {
+        if ($self->index < $self->max_size - 1) {
             $self->index($self->index+1);
         }
         else {
@@ -183,15 +183,15 @@ sub splice {
     my ($self, $offset, $length, @items) = @_;
     my $endset = $offset + $length - 1;
 
-    croak "illegal offset was set" if $offset < 0 || $offset > $self->max_size;
-    croak "illegal length was set" if $endset < 0 || $endset > $self->max_size;
+    croak "illegal offset was set" if $offset < 0 || $offset > $self->max_size - 1;
+    croak "illegal length was set" if $endset < 0 || $endset > $self->max_size - 1;
 
     my @tids = @{$self->indices}[$offset .. $endset];
     my @delete_items = $self->get(@tids);
     my $diff = scalar @items - scalar @delete_items;
     if ($diff > 0) {
         for my $i (0 .. $diff) {
-            if ($self->index < $self->max_size) {
+            if ($self->index < $self->max_size - 1) {
                 $self->index($self->index+1);
                 my ($tid) = CORE::splice @{$self->indices}, $self->index, 1;
                 CORE::splice @{$self->indices}, $offset+$i, 0, $tid;
