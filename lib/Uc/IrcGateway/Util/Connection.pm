@@ -29,7 +29,7 @@ extends 'AnyEvent::Handle', any_moose('::Object');
 has 'self' => ( is => 'rw', isa => 'Uc::IrcGateway::Util::User' );
 has 'options' => ( is => 'rw', isa => 'HashRef', default => sub { {} } );
 has 'channels' => (
-    is => 'ro', traits => ['Hash'], default => sub { {} }, init_arg => undef,
+    is => 'rw', traits => ['Hash'], default => sub { {} }, init_arg => undef,
     isa => 'HashRef[Uc::IrcGateway::Util::Channel]', handles => {
         get_channels => 'get',
         set_channels => 'set',

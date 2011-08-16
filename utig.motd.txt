@@ -1,0 +1,8 @@
+- utig.pl's message of the day
+
+    TODO:
+        MySQLと連携する
+        consumer_key 偽装
+        あらゆる入出力を utf8 で書かないと死ぬ。まあこれはだるいからいいや
+        たまに perl が爆走する。CPU熔ける → EV.pm アップデートしたら直った
+

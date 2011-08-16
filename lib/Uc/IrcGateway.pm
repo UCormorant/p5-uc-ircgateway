@@ -16,7 +16,7 @@ use Uc::IrcGateway::Util::Channel;
 use Uc::IrcGateway::Util::Connection;
 use Uc::IrcGateway::Util::TypableMap;
 
-use Smart::Comments;
+#use Smart::Comments;
 
 BEGIN {
     no strict 'refs';
@@ -180,7 +180,7 @@ sub _event_user {
     $self->send_msg( $handle, RPL_CREATED, "This server was created ".$self->ctime );
     $self->send_msg( $handle, RPL_MYINFO, "@{[ $self->servername ]} @{[ ref $self ]}-$VERSION" );
     if (-e $self->motd) {
-        my $fh = $self->motd->open('r');
+        my $fh = $self->motd->open('r', ':raw');
         if (defined $fh) {
             my $i = 0;
             while (<$fh>) {
@@ -210,13 +210,13 @@ sub _event_join {
         $handle->set_channels($chan => Uc::IrcGateway::Util::Channel->new) if !$handle->has_channel($chan);
         $handle->get_channels($chan)->set_users( $nick => $handle->self );
 
-        # sever reply
-        $self->send_msg( $handle, RPL_TOPIC, $chan, $handle->get_channels($chan)->topic || '' );
-        $self->handle_msg( parse_irc_msg("NAMES $chan"), $handle );
-        $self->send_cmd( $handle, $self->daemon, 'MODE', $chan, '+o', $nick );
-
         # send join message
         $self->send_cmd( $handle, $handle->self, 'JOIN', $chan );
+
+        # sever reply
+        $self->send_msg( $handle, RPL_TOPIC, $chan, $handle->get_channels($chan)->topic || '' );
+        $self->handle_msg( parse_irc_msg("WHO $chan"), $handle );
+        $self->send_cmd( $handle, $self->daemon, 'MODE', $chan, '+o', $nick );
     }
 
     @_;
@@ -299,8 +299,8 @@ sub _event_names {
 #            push @names, ($m->{o} ? '@' : $m->{m} ? '+' : '') . $name;
 #        }
 #        $self->send_msg( $handle, RPL_NAMREPLY, $chan, ':'.join ',', @names );
-        $self->send_msg( $handle, RPL_NAMREPLY, $chan, join ' ', sort $c->user_list );
-        $self->send_msg( $handle, RPL_ENDOFNAMES, $chan, 'End of /NAMES list' );
+        $self->send_msg( $handle, $self->daemon, RPL_NAMREPLY, '@', $chan, join ' ', sort $c->user_list );
+        $self->send_msg( $handle, $self->daemon, RPL_ENDOFNAMES, '@', $chan, 'End of /NAMES list' );
     }
 
     @_;
@@ -314,11 +314,12 @@ sub _event_list {
     $self->send_msg( $handle, RPL_LISTSTART, $nick, 'Channel', 'Users Name' );
     for my $chan (split /,/, $chans) {
         next unless $self->check_channel_name( $handle, $chan, enable => 1 );
-        my $member_count = scalar values %{$handle->get_channels($chan)};
-        my $topic = $handle->get_channels($chan)->topic;
-        $self->send_msg( $handle, RPL_LIST, $nick, $chan, $member_count, $topic || '' );
+        my $channel = $handle->get_channels($chan);
+        my $member_count = scalar values %{$channel->users};
+        my $topic = $channel->topic;
+        $self->send_msg( $handle, RPL_LIST, $chan, $member_count, $topic );
     }
-    $self->send_msg( $handle, RPL_LISTEND, $nick, 'END of /List' );
+    $self->send_msg( $handle, RPL_LISTEND, 'END of /List' );
 
     @_;
 }
@@ -332,9 +333,9 @@ sub _event_who {
 
     # TODO: いまのところ channel の完全一致チェックしにか対応してません
     for my $u (values %{$handle->get_channels($check)->users}) {
-        $self->send_msg( $handle, RPL_WHOREPLY, $check, $u->login, $u->host, $u->server, $u->nick, 'H ', '1 '.$u->realname);
+        $self->send_msg( $handle, RPL_WHOREPLY, $check, $u->login, $u->host, $u->server, $u->nick, 'H', '1 '.$u->realname);
     }
-    $self->send_msg( $handle, RPL_ENDOFWHO, 'END of /WHO List');
+    $self->send_msg( $handle, RPL_ENDOFWHO, $check, 'END of /WHO List');
 
     @_;
 }
@@ -374,23 +375,15 @@ sub server_comment {
 
 sub send_msg {
     my ($self, $handle, $cmd, @args) = @_;
-    my $msg = mk_msg($self->host, $cmd, $handle->self->nick, @args) . $CRLF;
+    my $msg = mk_msg($self->daemon->to_prefix, $cmd, $handle->self->nick, @args) . $CRLF;
     ### $msg
     $handle->push_write($msg);
 }
 
 sub send_cmd {
     my ($self, $handle, $user, $cmd, @args) = @_;
-    my $prefix = $user ? $user->to_prefix : undef;
+    my $prefix = ref $user eq 'Uc::IrcGateway::Util::User' ? $user->to_prefix : $user;
     my $msg = mk_msg($prefix, $cmd, @args) . $CRLF;
-    ### $msg
-    $handle->push_write($msg);
-}
-
-sub send_cmt {
-    my ($self, $handle, $cmd, @args) = @_;
-    my $comment = $self->server_comment($self->gatewayname);
-    my $msg = mk_msg($comment, $cmd, $handle->self->nick, @args) . $CRLF;
     ### $msg
     $handle->push_write($msg);
 }
