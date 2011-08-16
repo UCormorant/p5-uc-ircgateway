@@ -107,7 +107,7 @@ override '_event_privmsg' => sub {
     my ($chan, $text) = @{$msg->{params}};
     return () unless $self->check_channel_name( $handle, $chan, enable => 1 );
 
-    if ($text =~ /^\s+(\w+)\s+(.*)/) {
+    if ($text =~ /^\s+(\w+)(?:\s+(.*))?/) {
         my ($cmd, $arg) = ($1, $2);
         if ($cmd =~ /^re(?:ply)?$/) {
             my ($tid, $text) = split /\s+/, $arg, 2;
@@ -179,7 +179,7 @@ sub _event_unfavorite {
 }
 
 sub _event_delete {
-    my ($self, $msg, $handle) = _check_params(@_);
+    my ($self, $msg, $handle) = @_;
 
     my $nt = $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
     my @tids = @{$msg->{params}} || $handle->get_channels('#twitter')->topic =~ /\[(.+?)\]$/;
