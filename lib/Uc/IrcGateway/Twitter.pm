@@ -291,8 +291,8 @@ sub streamer {
             if ($target->{id} == $handle->self->login) {
                 $tweet->{text} ||= '';
                 (my $text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
-                my $notice = "\@$source->{screen_name} $happen \@$target->{screen_name}".($text ? ": $text" : "");
-                $self->send_cmd( $handle, $source->{screen_name}, 'NOTICE', '#twitter', $notice );
+                my $message = "$happen $target->{screen_name}".($text ? ": $text" : "");
+                $self->send_cmd( $handle, $source->{screen_name}, 'PRIVMSG', '#twitter', $message );
             }
         },
         on_tweet => sub {
