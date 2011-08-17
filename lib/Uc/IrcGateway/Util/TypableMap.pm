@@ -54,7 +54,7 @@ has 'max_size'  => ( is => 'rw', isa => 'Int', lazy_build => 1, trigger => sub {
     my ($self, $value) = @_;
     my $max_size = scalar @{$self->indices};
     if ($value > $max_size) { $self->max_size($max_size); }
-    else { CORE::splice @{$self->indices}, 0, $value; }
+    else { CORE::splice @{$self->indices}, $value; }
 } );
 
 has 'items'   => ( is => 'ro', isa => 'HashRef', default => sub { return {} }, init_arg => undef );
