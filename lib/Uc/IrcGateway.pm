@@ -3,7 +3,7 @@ package Uc::IrcGateway;
 use 5.010;
 use common::sense;
 use warnings qw(utf8);
-use version; our $VERSION = qv('0.3.4');
+use version; our $VERSION = qv('0.4.0');
 
 use Any::Moose;
 use Any::Moose qw(::Util::TypeConstraints);
@@ -37,6 +37,7 @@ has 'ctime'      => ( is => 'ro', isa => 'Str', lazy => 1, builder => sub { scal
 has 'admin'      => ( is => 'ro', isa => 'Str', default => 'nobody' );
 has 'password'   => ( is => 'ro', isa => 'NoBlankedStr');
 has 'motd' => ( is => 'ro', isa => 'Path::Class::File', default => sub { (my $file = $0) =~ s/\.\w+$//; file("$file.motd.txt") } );
+has 'time_zone' => ( is => 'rw', isa => 'Str', default => 'local' );
 has 'channel_name_prefix' => ( is => 'ro', isa => 'NoBlankedStr', default => '#' );
 has 'daemon' => ( is => 'ro', isa => 'Uc::IrcGateway::Util::User', lazy => 1, builder => sub {
     my $self = shift;
@@ -248,12 +249,21 @@ sub _event_topic {
     my ($chan, $topic) = @{$msg->{params}};
     return () unless $self->check_channel_name( $handle, $chan, enable => 1 );
 
+
     if ($topic) {
+        # send topic message
+        my $prefix = $msg->{prefix} || $handle->self;
+        $self->send_cmd( $handle, $prefix, 'TOPIC', $chan, $topic );
+
+        # server reply
         $handle->get_channels($chan)->topic( $topic );
         $self->send_msg( $handle, RPL_TOPIC, $chan, $topic );
     }
-    else {
+    elsif (defined $topic) {
         $self->send_msg( $handle, RPL_NOTOPIC, $chan, 'No topic is set' );
+    }
+    else {
+        $self->send_msg( $handle, RPL_TOPIC, $chan, $handle->get_channels($chan)->topic );
     }
 
     @_;
@@ -266,8 +276,8 @@ sub _event_privmsg {
     my ($chan, $text) = @{$msg->{params}};
     return () unless $self->check_channel_name( $handle, $chan, enable => 1 );
 
-    # echo
-    $self->send_cmd( $handle, $handle->self, 'NOTICE', $chan, $text );
+    # send privmsg message
+    $self->send_cmd( $handle, $handle->self, 'PRIVMSG', $chan, $text );
 
     @_;
 }

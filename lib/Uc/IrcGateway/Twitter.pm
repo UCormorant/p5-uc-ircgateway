@@ -4,11 +4,13 @@ use 5.010;
 use common::sense;
 use warnings qw(utf8);
 use Encode qw(decode find_encoding);
-use Any::Moose; # qw(::Util::TypeConstraints);
+use Any::Moose;
+use Any::Moose qw(::Util::TypeConstraints);
 use Uc::IrcGateway;
 use Net::Twitter::Lite;
 use AnyEvent::Twitter::Stream;
 use HTML::Entities qw(decode_entities);
+use DateTime::Format::DateParse;
 use Config::Pit;
 
 use Data::Dumper;
@@ -25,8 +27,10 @@ our %IRC_COMMAND_EVENT = %Uc::IrcGateway::IRC_COMMAND_EVENT;
 my  $encode = find_encoding($CHARSET);
 
 extends 'Uc::IrcGateway';
+subtype 'ValidChanName' => as 'Str' => where { /^#[^\s,]+$/ } => message { "This Str ($_) is not a valid channel name!" };
 has '+port' => ( default => 16668 );
 has '+gatewayname' => ( default => 'twitterircgateway' );
+has 'stream_channel' => ( is => 'rw', isa => 'ValidChanName', default => '#twitter' );
 has 'conf_app' => ( is  => 'rw', isa => 'HashRef', required => 1 );
 
 sub BUILDARGS {
@@ -41,7 +45,7 @@ sub BUILDARGS {
 sub BUILD {
     no strict 'refs';
     my $self = shift;
-    for my $cmd (qw/user join part privmsg favorite unfavorite delete reply pin quit/) {
+    for my $cmd (qw/user join part privmsg favorite unfavorite delete reply retweet unoretweet pin quit/) {
         $IRC_COMMAND_EVENT{$cmd} = \&{"_event_$cmd"};
     }
     $self->reg_cb( %IRC_COMMAND_EVENT,
@@ -63,13 +67,23 @@ override '_event_user' => sub {
     my %opt = _opt_parser($handle->self->realname);
     $handle->options(\%opt);
     $handle->options->{account} ||= $handle->self->nick;
+    if (!$handle->options->{stream} ||
+        not $self->check_channel_name($handle, $handle->options->{stream})) {
+            $handle->options->{stream} = $self->stream_channel;
+    }
+    if ($handle->options->{consumer}) {
+        @{$handle->{conf_app}}{qw/consumer_key consumer_secret/} = split /:/, $handle->options->{consumer};
+    }
+    else {
+        $handle->{conf_app} = $self->conf_app;
+    }
 
     my $conf = $self->servername.'.'.$handle->options->{account};
     $handle->{conf_user} = pit_get( $conf );
     $handle->{lookup} = delete $handle->{conf_user}{lookup} || {};
     $handle->channels( delete $handle->{conf_user}{channels} || {} );
 
-    $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
+    $self->twitter_agent($handle);
 };
 
 override '_event_join' => sub {
@@ -77,11 +91,11 @@ override '_event_join' => sub {
     return unless $self;
 
     for my $chan (split /,/, $msg->{params}[0]) {
-        if ($chan eq '#twitter' && $self->check_channel_name( $handle, $chan, joined => 1 )) {
+        if ($chan eq $handle->options->{stream} && $self->check_channel_name( $handle, $chan, joined => 1 )) {
             $self->streamer(
                 handle          => $handle,
-                consumer_key    => $self->conf_app->{consumer_key},
-                consumer_secret => $self->conf_app->{consumer_secret},
+                consumer_key    => $handle->{conf_app}{consumer_key},
+                consumer_secret => $handle->{conf_app}{consumer_secret},
                 token           => $handle->{conf_user}{token},
                 token_secret    => $handle->{conf_user}{token_secret},
             );
@@ -96,7 +110,7 @@ override '_event_part' => sub {
     my ($chans, $text) = @{$msg->{params}};
 
     for my $chan (split /,/, $chans) {
-        delete $handle->{streamer} if $chan eq '#twitter';
+        delete $handle->{streamer} if $chan eq $handle->options->{stream};
     }
 };
 
@@ -108,22 +122,23 @@ override '_event_privmsg' => sub {
     return () unless $self->check_channel_name( $handle, $chan, enable => 1 );
 
     if ($text =~ /^\s+(\w+)(?:\s+(.*))?/) {
-        my ($cmd, $arg) = ($1, $2);
+        my ($cmd, $arg) = ($1, $2); $arg ||= '';
         if ($cmd =~ /^re(?:ply)?$/) {
-            my ($tid, $text) = split /\s+/, $arg, 2;
+            my ($tid, $text) = split /\s+/, $arg, 2; $text ||= '';
             $self->handle_msg(parse_irc_msg("REPLY $tid :$text"), $handle); return ();
         }
         if ($cmd =~ /^f(?:av(?:ou?rites?)?)?$/)   { $self->handle_msg(parse_irc_msg("FAVORITE $arg"),   $handle); return (); }
         if ($cmd =~ /^unf(?:av(?:ou?rites?)?)?$/) { $self->handle_msg(parse_irc_msg("UNFAVORITE $arg"), $handle); return (); }
         if ($cmd =~ /^o+ps!*$|^del(?:ete)?$/)     { $self->handle_msg(parse_irc_msg("DELETE $arg"),     $handle); return (); }
-#        if ($cmd =~ /^rt$|^retweet$/)            { $self->handle_msg(parse_irc_msg("RETWEET $arg"), $handle);  return (); }
+        if ($cmd =~ /^or(?:etwee)?t$/)            { $self->handle_msg(parse_irc_msg("RETWEET $arg"),    $handle); return (); }
+        if ($cmd =~ /^r(?:etwee)?t$/)             { $self->handle_msg(parse_irc_msg("UNORETWEET $arg"), $handle); return (); }
 #        if ($cmd =~ /^me(?:ntion)?$/)            { $self->handle_msg(parse_irc_msg("MENTION $arg"), $handle);  return (); }
     }
 
-    my $nt = $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
+    my $nt = $self->twitter_agent($handle);
     my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
         eval { $nt->update($encode->decode($text)); };
-        if ($@) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', '#twitter', qq|send error: "$text": $@| ); }
+        if ($@) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $handle->options->{stream}, qq|send error: "$text": $@| ); }
         undef $w;
     } );
 };
@@ -134,10 +149,10 @@ sub _event_reply {
 
     my ($tid, $text) = @{$msg->{params}};
     my $tweet = $handle->{tmap}->get($tid);
-    my $nt = $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
+    my $nt = $self->twitter_agent($handle);
     my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
-        eval { $nt->update({ status => $encode->decode($text), in_reply_to_status_id => $tweet->{id} }); };
-        if ($@) { $self->send_cmd($handle, $self->daemon, 'NOTICE', '#twitter', "reply error: $@"); }
+        eval { $nt->update({ status => $encode->decode("\@$tweet->{user}{screen_name} $text"), in_reply_to_status_id => $tweet->{id} }); };
+        if ($@) { $self->send_cmd($handle, $self->daemon, 'NOTICE', $handle->options->{stream}, "reply error: $@"); }
         undef $w;
     } );
 }
@@ -146,61 +161,80 @@ sub _event_favorite {
     my ($self, $msg, $handle) = _check_params(@_);
     return unless $self;
 
-    my $nt = $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
-    for my $tweet ($handle->{tmap}->get(@{$msg->{params}})) {
-        my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
-            eval { $nt->create_favorite($tweet->{id}); };
-            if ($@) { $self->send_cmd($handle, $self->daemon, 'NOTICE', '#twitter', "favorite error: $@"); }
-            else    {
-                (my $text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
-                $self->send_cmd($handle, $self->daemon, 'NOTICE', '#twitter', "faved: $tweet->{user}{screen_name}: $text");
-            }
-            undef $w;
-        } );
-    }
+    my $nt = $self->twitter_agent($handle);
+    my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
+        for my $tid (@{$msg->{params}}) {
+            $self->tid_event($handle, 'fav', $tid, sub { $nt->create_favorite(shift) });
+        }
+        undef $w;
+    } );
 }
 
 sub _event_unfavorite {
     my ($self, $msg, $handle) = _check_params(@_);
     return unless $self;
 
-    my $nt = $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
-    for my $tweet ($handle->{tmap}->get(@{$msg->{params}})) {
-        my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
-            eval { $nt->destroy_favorite($tweet->{id}); };
-            if ($@) { $self->send_cmd($handle, $self->daemon, 'NOTICE', '#twitter', "unfavorite error: $@"); }
-            else    {
-                (my $text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
-                $self->send_cmd($handle, $self->daemon, 'NOTICE', '#twitter', "unfaved: $tweet->{user}{screen_name}: $text");
-            }
-            undef $w;
-        } );
-    }
+    my $nt = $self->twitter_agent($handle);
+    my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
+        for my $tid (@{$msg->{params}}) {
+            $self->tid_event($handle, 'unfav', $tid, sub { $nt->destroy_favorite(shift) });
+        }
+        undef $w;
+    } );
+}
+
+sub _event_retweet {
+    my ($self, $msg, $handle) = _check_params(@_);
+    return unless $self;
+
+    my $nt = $self->twitter_agent($handle);
+    my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
+        for my $tid (@{$msg->{params}}) {
+            $self->tid_event($handle, 'retweet', $tid, sub { $nt->retweet(shift) });
+        }
+        undef $w;
+    } );
+}
+
+sub _event_unoretweet {
+    my ($self, $msg, $handle) = _check_params(@_);
+    return unless $self;
+
+    my ($tid, $text) = @{$msg->{params}};
+    my $nt = $self->twitter_agent($handle);
+    my $tweet = $handle->{tmap}->get($tid);
+    (my $notice = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
+
+    $text   = $text ? $text.' ' : '';
+    $notice = $text."RT \@$tweet->{user}{screen_name}: $notice";
+    $notice =~ s/....$/.../ while length $notice > 140;
+
+    my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
+        eval { $nt->update({ status => $encode->decode($notice), in_reply_to_status_id => $tweet->{id} }); };
+        if ($@) { $self->send_cmd($handle, $self->daemon, 'NOTICE', $handle->options->{stream}, "reply error: $@"); }
+        undef $w;
+    } );
 }
 
 sub _event_delete {
     my ($self, $msg, $handle) = @_;
 
-    my $nt = $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user});
-    my @tids = @{$msg->{params}} || $handle->get_channels('#twitter')->topic =~ /\[(.+?)\]$/;
-    for my $tweet ($handle->{tmap}->get(@tids)) {
-        my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
-            eval { $nt->destroy_status($tweet->{id}); };
-            if ($@) { $self->send_cmd($handle, $self->daemon, 'NOTICE', '#twitter', "delete error: $@"); }
-            else    {
-                (my $text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
-                $self->send_cmd($handle, $self->daemon, 'NOTICE', '#twitter', "delete: $tweet->{user}{screen_name}: $text");
-            }
-            undef $w;
-        } );
-    }
+    my $nt = $self->twitter_agent($handle);
+    my @tids = @{$msg->{params}};
+       @tids = $handle->get_channels($handle->options->{stream})->topic =~ /\[(.+?)\]$/ if not scalar @tids;
+    my $w; $w = AnyEvent->timer( after => 0.5, cb => sub {
+        for my $tid (@tids) {
+            $self->tid_event($handle, 'delete', $tid, sub { $nt->destroy_status(shift) });
+        }
+        undef $w;
+    } );
 }
 
 sub _event_pin {
     my ($self, $msg, $handle) = _check_params(@_);
     my $pin = $msg->{params}[0];
 
-    $self->twitter_agent($handle, $self->conf_app, $handle->{conf_user}, $pin);
+    $self->twitter_agent($handle, $pin);
     my $conf = $self->servername.'.'.$handle->options->{account};
     pit_set( $conf, data => {
         %{$handle->{conf_user}},
@@ -220,12 +254,31 @@ sub _event_quit {
     undef $handle;
 };
 
+sub tid_event {
+    my ($self, $handle, $event, $tid, $cb) = @_;
+    my $tweet = $handle->{tmap}->get($tid);
+    my $text = '';
+
+    if (!$tweet) { $text = "$event error: no such tid"; }
+    else {
+        eval { $cb->($tweet->{id}); };
+        if ($@) { $text = "$event error: $@"; }
+        else    {
+            ($text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
+            $event =~ s/e$//;
+            $text = "${event}ed: $tweet->{user}{screen_name}: $text";
+        }
+    }
+    $self->send_cmd( $handle, $self->daemon, 'NOTICE', $handle->options->{stream}, "$text [$tid]" );
+}
+
 sub _opt_parser { my %opt; $opt{$1} = $2 while $_[0] =~ /(?:(\w+)=(\S+))/g; %opt }
 
 sub twitter_agent {
-    my ($self, $handle, $conf_app, $conf_user, $pin) = @_;
+    my ($self, $handle, $pin) = @_;
     return $handle->{nt} if defined $handle->{nt} && $handle->{nt}{authorized};
 
+    my ($conf_app, $conf_user) = @{$handle}{qw/conf_app conf_user/};
     if (ref $handle->{nt} ne 'Net::Twitter::Lite') {
         $handle->{nt} = Net::Twitter::Lite->new(%$conf_app);
     }
@@ -234,24 +287,24 @@ sub twitter_agent {
     $nt->access_token($conf_user->{token});
     $nt->access_token_secret($conf_user->{token_secret});
 
-    eval {
-        if ($pin) {
+    if ($pin) {
+        eval {
             @{$conf_user}{qw/token token_secret user_id screen_name/} = $nt->request_access_token(verifier => $pin);
             $nt->{config_updated} = 1;
+        };
+        if ($@) {
+            $self->send_msg( $handle, ERR_YOUREBANNEDCREEP, "twitter authorization error: $@" );
         }
-        if ($nt->{authorized} = $nt->authorized) {
-            my $user = $handle->self;
-            $user->login($conf_user->{user_id});
-            $user->host('twitter.com');
-            $self->handle_msg(parse_irc_msg('JOIN #twitter'), $handle);
-        }
-        else {
-            $self->send_msg($handle, 'NOTICE', 'please open the following url and allow this app, then enter /PIN {code}.');
-            $self->send_msg($handle, 'NOTICE', $nt->get_authorization_url);
-        }
-    };
-    if ($@) {
-        $self->send_msg( $handle, ERR_YOUREBANNEDCREEP, "twitter authorization error: $@" );
+    }
+    if ($nt->{authorized} = eval { $nt->account_totals; }) {
+        my $user = $handle->self;
+        $user->login($conf_user->{user_id});
+        $user->host('twitter.com');
+        $self->handle_msg(parse_irc_msg('JOIN '.$handle->options->{stream}), $handle);
+    }
+    else {
+        $self->send_msg($handle, 'NOTICE', 'please open the following url and allow this app, then enter /PIN {code}.');
+        $self->send_msg($handle, 'NOTICE', $nt->get_authorization_url);
     }
 
     return ();
@@ -269,10 +322,10 @@ sub streamer {
         %config,
 
         on_connect => sub {
-            $self->send_cmd( $handle, $self->daemon, 'NOTICE', '#twitter', 'streamer start to read.' );
+            $self->send_cmd( $handle, $self->daemon, 'NOTICE', $handle->options->{stream}, 'streamer start to read.' );
         },
         on_eof => sub {
-            $self->send_cmd( $handle, $self->daemon, 'NOTICE', '#twitter', 'streamer stop to read.' );
+            $self->send_cmd( $handle, $self->daemon, 'NOTICE', $handle->options->{stream}, 'streamer stop to read.' );
             delete $handle->{streamer};
             $self->streamer(handle => $handle, %config);
         },
@@ -289,10 +342,15 @@ sub streamer {
             my $tweet  = $event->{target_object} || {};
 
             if ($target->{id} == $handle->self->login) {
-                $tweet->{text} ||= '';
-                (my $text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
-                my $notice = "$happen \@$target->{screen_name}".($text ? ": $text" : "");
-                $self->send_cmd( $handle, $source->{screen_name}, 'NOTICE', '#twitter', $notice );
+                my $text = '';
+                if ($tweet->{text} ||= '') {
+                    ($text = $encode->encode(decode_entities($tweet->{text}))) =~ s/[\r\n]+/ /g;
+                    my $dt = DateTime::Format::DateParse->parse_datetime($tweet->{created_at});
+                    $dt->set_time_zone( $self->time_zone );
+                    $text .= " ($dt/$tweet->{id})";
+                }
+                my $notice = "$happen $target->{screen_name}".($text ? ": $text" : "");
+                $self->send_cmd( $handle, $source->{screen_name}, 'NOTICE', $handle->options->{stream}, $notice );
             }
         },
         on_tweet => sub {
@@ -309,9 +367,10 @@ sub streamer {
             (my $url  = $encode->encode(decode_entities($tweet->{user}{url})))  =~ s/[\r\n]+/ /g;
             $url =~ s/\s/+/g; $url ||= "http://twitter.com/$nick";
 
-            if ($handle->has_channel('#twitter') and defined $real) {
+            my $stream_channel = $handle->options->{stream};
+            if ($handle->has_channel($stream_channel) and defined $real) {
                 my $oldnick = $handle->{lookup}{$real} || '';
-                my $channel = $handle->get_channels('#twitter');
+                my $channel = $handle->get_channels($stream_channel);
 
                 my $user;
                 if (!$oldnick || !$channel->has_user($oldnick)) {
@@ -319,7 +378,7 @@ sub streamer {
                         nick => $nick, login => $real, realname => $name,
                         host => 'twitter.com', addr => '127.0.0.1', server => $url,
                     );
-                    $self->send_cmd( $handle, $user, 'JOIN', '#twitter' );
+                    $self->send_cmd( $handle, $user, 'JOIN', $stream_channel );
                     $channel->set_users($nick => $user);
                 }
                 else {
@@ -332,10 +391,10 @@ sub streamer {
 
                 if ($nick eq $handle->self->nick) {
                     $channel->topic("$text [$tmap]");
-                    $self->send_msg($handle, RPL_TOPIC, '#twitter', "$text [$tmap]");
+                    $self->handle_msg(parse_irc_msg("TOPIC $stream_channel :$text [$tmap]"), $handle);
                 }
                 else {
-                    $self->send_cmd( $handle, $user, 'PRIVMSG', '#twitter', "$text [$tmap]" );
+                    $self->send_cmd( $handle, $user, 'PRIVMSG', $stream_channel, "$text [$tmap]" );
                 }
 
                 $user->last_modified(time);

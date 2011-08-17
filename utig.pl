@@ -37,6 +37,7 @@ my $ircd = Uc::IrcGateway::Twitter->new(
     port => $port,
     servername => 'utig.pl',
     welcome => 'Welcome to the utig server',
+    time_zone => 'Asia/Tokyo',
     consumer_key    => '99tP2pSCdf7y0LkEKsMR5w',
     consumer_secret => 'iJiKJCAGnwolMDLgGaRyStHQvS5RBVCMGMZlAwk',
 );
