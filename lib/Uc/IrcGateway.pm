@@ -3,7 +3,7 @@ package Uc::IrcGateway;
 use 5.010;
 use common::sense;
 use warnings qw(utf8);
-use version; our $VERSION = qv('0.4.1');
+use version; our $VERSION = qv('0.5.0');
 
 use Any::Moose;
 use Any::Moose qw(::Util::TypeConstraints);
@@ -26,7 +26,7 @@ BEGIN {
 };
 
 extends qw/Object::Event Exporter/;
-subtype 'NoBlankedStr' => as 'Str'   => where { /^\S+$/ } => message { "This Str ($_) should not have any blanks!" };
+subtype 'NoBlankedStr' => as 'Str'   => where { /^\S+$/ } => message { "This Str ($_) must not have any blanks!" };
 coerce  'NoBlankedStr' => from 'Str' => via { s/\s+//g; $_ };
 has 'host' => ( is => 'ro', isa => 'Str', required => 1, default => '127.0.0.1' );
 has 'port' => ( is => 'ro', isa => 'Int', required => 1, default => 6667 );
@@ -38,7 +38,7 @@ has 'admin'      => ( is => 'ro', isa => 'Str', default => 'nobody' );
 has 'password'   => ( is => 'ro', isa => 'NoBlankedStr');
 has 'motd' => ( is => 'ro', isa => 'Path::Class::File', default => sub { (my $file = $0) =~ s/\.\w+$//; file("$file.motd.txt") } );
 has 'time_zone' => ( is => 'rw', isa => 'Str', default => 'local' );
-has 'channel_name_prefix' => ( is => 'ro', isa => 'NoBlankedStr', default => '#' );
+has 'channel_name_prefix' => ( is => 'ro', isa => 'NoBlankedStr', default => '#&' );
 has 'daemon' => ( is => 'ro', isa => 'Uc::IrcGateway::Util::User', lazy => 1, builder => sub {
     my $self = shift;
     my $gatewayname = $self->gatewayname;
@@ -405,7 +405,7 @@ sub need_more_params {
 
 sub valid_channel_name {
     my ($self, $chan) = @_;
-    my $match = $self->channel_name_prefix . '[^\s,]+';
+    my $match = '['.$self->channel_name_prefix.']' . '[^\s,]+';
     return $chan =~ /^$match$/;
 }
 

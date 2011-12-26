@@ -27,10 +27,11 @@ our %IRC_COMMAND_EVENT = %Uc::IrcGateway::IRC_COMMAND_EVENT;
 my  $encode = find_encoding($CHARSET);
 
 extends 'Uc::IrcGateway';
-subtype 'ValidChanName' => as 'Str' => where { /^#[^\s,]+$/ } => message { "This Str ($_) is not a valid channel name!" };
+subtype 'ValidChanName' => as 'Str' => where { /^[#&][^\s,]+$/ } => message { "This Str ($_) is not a valid channel name!" };
 has '+port' => ( default => 16668 );
 has '+gatewayname' => ( default => 'twitterircgateway' );
 has 'stream_channel' => ( is => 'rw', isa => 'ValidChanName', default => '#twitter' );
+has 'activity_channel' => ( is => 'rw', isa => 'ValidChanName', default => '#activity' );
 has 'conf_app' => ( is  => 'rw', isa => 'HashRef', required => 1 );
 
 sub BUILDARGS {
@@ -67,9 +68,15 @@ override '_event_user' => sub {
     my %opt = _opt_parser($handle->self->realname);
     $handle->options(\%opt);
     $handle->options->{account} ||= $handle->self->nick;
+    $handle->options->{mention_count} ||= 20;
+    $handle->options->{include_rts} ||= 0;
     if (!$handle->options->{stream} ||
         not $self->check_channel_name($handle, $handle->options->{stream})) {
             $handle->options->{stream} = $self->stream_channel;
+    }
+    if (!$handle->options->{activity} ||
+        not $self->check_channel_name($handle, $handle->options->{activity})) {
+            $handle->options->{activity} = $self->activity_channel;
     }
     if ($handle->options->{consumer}) {
         @{$handle->{conf_app}}{qw/consumer_key consumer_secret/} = split /:/, $handle->options->{consumer};
@@ -81,6 +88,7 @@ override '_event_user' => sub {
     my $conf = $self->servername.'.'.$handle->options->{account};
     $handle->{conf_user} = pit_get( $conf );
     $handle->{lookup} = delete $handle->{conf_user}{lookup} || {};
+    $handle->{tmap} = tie @{$handle->{timeline}}, 'Uc::IrcGateway::Util::TypableMap', shuffled => 1;
     $handle->channels( delete $handle->{conf_user}{channels} || {} );
 
     $self->twitter_agent($handle);
@@ -90,8 +98,15 @@ override '_event_join' => sub {
     my ($self, $msg, $handle) = super();
     return unless $self;
 
+    my $nt   = $handle->{nt};
+    my $tmap = $handle->{tmap};
+    my $stream_channel   = $handle->options->{stream};
+    my $activity_channel = $handle->options->{activity};
+
     for my $chan (split /,/, $msg->{params}[0]) {
-        if ($chan eq $handle->options->{stream} && $self->check_channel_name( $handle, $chan, joined => 1 )) {
+        next unless $self->check_channel_name( $handle, $chan, joined => 1 );
+
+        if ($chan eq $stream_channel) {
             $self->streamer(
                 handle          => $handle,
                 consumer_key    => $handle->{conf_app}{consumer_key},
@@ -99,6 +114,68 @@ override '_event_join' => sub {
                 token           => $handle->{conf_user}{token},
                 token_secret    => $handle->{conf_user}{token_secret},
             );
+
+            eval {
+                my $user = $nt->show_user($handle->self->{login});
+                my $status = delete $user->{status};
+                $status->{user} = $user;
+
+                $status->{text} ||= '';
+                (my $text = $encode->encode(decode_entities($status->{text}))) =~ s/[\r\n]+/ /g;
+                $self->handle_msg(parse_irc_msg("TOPIC $stream_channel :$text [$tmap]"), $handle);
+                push @{$handle->{timeline}}, $status;
+            };
+            if ($@) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $stream_channel, qq|topic fetching error: $@| ); }
+        }
+        elsif ($chan eq $activity_channel) {
+            eval {
+                my $mentions = $nt->mentions({
+                    count => $handle->options->{mention_count},
+                    include_rts => $handle->options->{include_rts},
+                });
+
+                for my $mention (reverse @$mentions) {
+                    my ($nick, $real) = @{$mention->{user}}{qw/screen_name id/};
+                    next unless $nick and $mention->{text};
+
+                    $mention->{text}       ||= '';
+                    $mention->{user}{name} ||= '';
+                    $mention->{user}{url}  ||= '';
+                    (my $text = $encode->encode(decode_entities($mention->{text})))       =~ s/[\r\n]+/ /g;
+                    (my $name = $encode->encode(decode_entities($mention->{user}{name}))) =~ s/[\r\n]+/ /g;
+                    (my $url  = $encode->encode(decode_entities($mention->{user}{url})))  =~ s/[\r\n]+/ /g;
+                    $url =~ s/\s/+/g; $url ||= "http://twitter.com/$nick";
+
+                    my $stream_channel = $handle->options->{stream};
+                    if ($handle->has_channel($stream_channel) and defined $real) {
+                        my $oldnick = $handle->{lookup}{$real} || '';
+                        my $channel = $handle->get_channels($stream_channel);
+
+                        my $user;
+                        if (!$oldnick || !$channel->has_user($oldnick)) {
+                            $user = Uc::IrcGateway::Util::User->new(
+                                nick => $nick, login => $real, realname => $name,
+                                host => 'twitter.com', addr => '127.0.0.1', server => $url,
+                            );
+                            $self->send_cmd( $handle, $user, 'JOIN', $stream_channel );
+                            $channel->set_users($nick => $user);
+                        }
+                        else {
+                            $user = $channel->get_users($oldnick);
+                            if ($oldnick ne $nick) {
+                                $self->send_cmd( $handle, $user, 'NICK', $nick );
+                                for my $chan ($handle->who_is_channel($oldnick)) {
+                                    $chan->get_users($oldnick)->nick($nick);
+                                }
+                            }
+                        }
+
+                        $self->send_cmd( $handle, $user, 'PRIVMSG', $activity_channel, "$text [$tmap]" );
+                        push @{$handle->{timeline}}, $mention;
+                    }
+                }
+            };
+            if ($@) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $activity_channel, qq|mention fetching error: $@| ); }
         }
     }
 };
@@ -274,6 +351,67 @@ sub tid_event {
 
 sub _opt_parser { my %opt; $opt{$1} = $2 while $_[0] =~ /(?:(\w+)=(\S+))/g; %opt }
 
+sub join_channels {
+    my ($self, $handle, $retry) = @_;
+    my $nt = $handle->{nt};
+
+    my $lists = eval { $nt->all_lists(); };
+    $retry ||= 5 + 1;
+
+    if ($@ && --$retry) {
+        my $time = 10;
+        my $text = "list fetching error (you will retry after $time sec): $@";
+        $self->send_cmd( $handle, $self->daemon, 'NOTICE', $handle->options->{stream}, $text);
+        my $w; $w = AnyEvent->timer( after => $time, cb => sub {
+            $self->join_channels($handle, $retry);
+            undef $w;
+        } );
+    }
+    else {
+        $self->handle_msg(parse_irc_msg('JOIN '.$handle->options->{stream}), $handle);
+        $self->handle_msg(parse_irc_msg('JOIN '.$handle->options->{activity}), $handle);
+
+        for my $list (@$lists) {
+            next if $list->{user}{id} ne $handle->self->login;
+
+            $list->{description} ||= '';
+            (my $text = $encode->encode(decode_entities($list->{description}))) =~ s/[\r\n]+/ /g;
+            my $chan = '#'.$list->{slug};
+            my @users;
+            my $page = -1;
+            while ($page != 0) {
+                my $res = eval { $nt->list_members({
+                    user => $list->{user}{screen_name},
+                    list_id => $list->{slug}, cursor => $page,
+                }); };
+                warn $@ and sleep 5 and next if $@;
+
+                push @users, @{$res->{users}};
+                $page = $res->{next_cursor};
+            }
+
+            for my $u (@users) {
+                my ($nick, $real) = @{$u}{qw/screen_name id/};
+
+                $u->{name} ||= '';
+                $u->{url}  ||= '';
+                (my $name = $encode->encode(decode_entities($u->{name}))) =~ s/[\r\n]+/ /g;
+                (my $url  = $encode->encode(decode_entities($u->{url})))  =~ s/[\r\n]+/ /g;
+                $url =~ s/\s/+/g; $url ||= "http://twitter.com/$nick";
+                my $user = Uc::IrcGateway::Util::User->new(
+                    nick => $nick, login => $real, realname => $name,
+                    host => 'twitter.com', addr => '127.0.0.1', server => $url,
+                );
+                $handle->set_channels($chan => Uc::IrcGateway::Util::Channel->new) if !$handle->has_channel($chan);
+                $handle->get_channels($chan)->set_users($nick => $user);
+            }
+
+            $self->handle_msg(parse_irc_msg("JOIN $chan"), $handle);
+            $self->handle_msg(parse_irc_msg("TOPIC $chan :$text"), $handle);
+        }
+    }
+}
+
 sub twitter_agent {
     my ($self, $handle, $pin) = @_;
     return $handle->{nt} if defined $handle->{nt} && $handle->{nt}{authorized};
@@ -300,7 +438,7 @@ sub twitter_agent {
         my $user = $handle->self;
         $user->login($conf_user->{user_id});
         $user->host('twitter.com');
-        $self->handle_msg(parse_irc_msg('JOIN '.$handle->options->{stream}), $handle);
+        $self->join_channels($handle);
     }
     else {
         $self->send_msg($handle, 'NOTICE', 'please open the following url and allow this app, then enter /PIN {code}.');
@@ -315,7 +453,7 @@ sub streamer {
     my $handle = delete $config{handle};
     return $handle->{streamer} if exists $handle->{streamer};
 
-    my $tmap = $handle->{tmap} = tie my(@TIMELINE), 'Uc::IrcGateway::Util::TypableMap', shuffled => 1;
+    my $tmap = $handle->{tmap};
     $handle->{streamer} = AnyEvent::Twitter::Stream->new(
         method  => 'userstream',
         timeout => 45,
@@ -385,21 +523,25 @@ sub streamer {
                     $user = $channel->get_users($oldnick);
                     if ($oldnick ne $nick) {
                         $self->send_cmd( $handle, $user, 'NICK', $nick );
-                        $user->nick($nick);
+                        for my $chan ($handle->who_is_channel($oldnick)) {
+                            $chan->get_users($oldnick)->nick($nick);
+                        }
                     }
                 }
 
                 if ($nick eq $handle->self->nick) {
                     $channel->topic("$text [$tmap]");
-                    $self->handle_msg(parse_irc_msg("TOPIC $stream_channel :$text [$tmap]"), $handle);
+                    $self->send_cmd( $handle, $user, 'TOPIC', $stream_channel, "$text [$tmap]" );
                 }
                 else {
-                    $self->send_cmd( $handle, $user, 'PRIVMSG', $stream_channel, "$text [$tmap]" );
+                    for my $chan ($handle->who_is_channel($nick)) {
+                        $self->send_cmd( $handle, $user, 'PRIVMSG', $chan, "$text [$tmap]" );
+                    }
                 }
 
                 $user->last_modified(time);
                 $handle->{lookup}{$real} = $nick;
-                push @TIMELINE, $tweet;
+                push @{$handle->{timeline}}, $tweet;
             }
         },
     );
