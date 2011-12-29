@@ -14,8 +14,6 @@ use Uc::IrcGateway::Twitter;
 use Encode qw(decode find_encoding);
 #use Encode::Guess qw(euc-jp shiftjis 7bit-jis); # using 'guess_encoding' is recoomended
 use opts;
-use Data::Dumper;
-use Smart::Comments;
 
 #BEGIN { $ENV{ANYEVENT_TWITTER_STREAM_SSL} = 1 }
 

@@ -3,7 +3,7 @@ package Uc::IrcGateway;
 use 5.010;
 use common::sense;
 use warnings qw(utf8);
-use version; our $VERSION = qv('0.6.0');
+use version; our $VERSION = qv('0.6.1');
 
 use Any::Moose;
 use Any::Moose qw(::Util::TypeConstraints);
@@ -135,7 +135,9 @@ no Any::Moose;
 sub BUILD {}
 sub run {
     my $self = shift;
-    $self->ctime;
+
+    say "Starting irc gateway server on @{[ $self->host.':'.$self->port ]}";
+
     tcp_server $self->host, $self->port, sub {
         my ($fh, $host, $port) = @_;
         my $handle = Uc::IrcGateway::Util::Connection->new(fh => $fh,
@@ -155,8 +157,16 @@ sub run {
         }) });
     }, sub {
         my ($fh, $host, $port) = @_;
-        say "bound to $host:$port";
-        say $self->welcome();
+        $self->ctime;
+
+        say "Bound to $host:$port";
+        say "Starting '@{[ $self->servername ]}' is succeed.";
+        say "@{[ $self->servername ]} settings:";
+        say "   - Listen on @{[ $self->host.':'.$self->port ]}";
+        say "   - Server created at @{[ $self->ctime ]}";
+        say "   - Server time zone is @{[ $self->time_zone ]}";
+        say "   - Gateway bot is @{[ $self->gatewayname ]}";
+        say "   - Message Of The Day uses @{[ scalar $self->motd ]}";
     };
 }
 
@@ -536,9 +546,11 @@ sub handle_irc_msg {
 
 sub handle_ctcp_msg {
     my ($self, $handle, $raw, %opts) = @_;
-    my $msg   = parse_irc_msg($raw);
-    my $event = lc($msg->{command});
-       $event = exists $CTCP_COMMAND_EVENT{"ctcp_$event"} ? "ctcp_$event" : 'ctcp';
+    my ($msg, $event) = {};
+
+    @{$msg}{qw/command params/} = split(' ', $raw, 2);
+    $event = lc($msg->{command});
+    $event = exists $CTCP_COMMAND_EVENT{"ctcp_$event"} ? "ctcp_$event" : 'ctcp';
 
     ### $raw
     $msg->{raw}    = $raw;

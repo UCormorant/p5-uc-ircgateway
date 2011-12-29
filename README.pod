@@ -1,0 +1,139 @@
+=pod
+
+=encoding utf8
+
+=head1 Name
+
+utig.pl - Twitter IRC Gateway of me by me for me
+
+=head1 Synopsis
+
+=head2 Start twitter irc gateway server
+
+  $ perl utig.pl
+
+=head2 Login utig.pl server
+
+=over 2
+
+=item 1
+
+IRCクライアントで起動したサーバに適当な名前でログインする
+
+=item 2
+
+暫くするとサーバーから OAuth 認証用の URL を渡されるので、それを開いて認証する
+
+=item 3
+
+IRCクライアントで
+
+  /pin <pin code>
+
+=back
+
+  Welcome to utig.pl server!
+
+好きにするといい！
+
+=head1 Features
+
+=over 2
+
+=item *
+
+UserStream を使用して閲覧するので発言が即座に流れてくるぞ！
+
+=item *
+
+あんまり API を叩かない仕様だから他の Twitter 関連サービスと併用しても安心！
+
+=item *
+
+コマンドと自前で作った TypableMap が快適な Twitter Life をサポートするぞ！
+
+=over 2
+
+コマンドは
+
+  my @action_command_info = (qq|action commands:|
+  ,  qq|/me mention (or me): fetch mentions|
+  ,  qq|/me reply (or re) <tid> <text>: reply to a <tid> tweet|
+  ,  qq|/me favorite (or f, fav) +<tid>: add <tid> tweets to favorites|
+  ,  qq|/me unfavorite (or unf, unfav) +<tid>: remove <tid> tweets from favorites|
+  ,  qq|/me retweet (or rt) +<tid>: retweet <tid> tweets|
+  ,  qq|/me quotetweet (or qt, qw) <tid> <text>: quotetweet a <tid> tweet, like "<text> QT \@tid_user: tid_tweet"|
+  ,  qq|/me delete (or del, oops) *<tid> : delete your <tid> tweets. when unset <tid>, delete your last tweet|
+  );
+
+こんなかんじだ！
+
+=back
+
+=item *
+
+Lists 対応。ただしリストに入れていてもフォローしてない人の発言は流れてこないぞ！
+しかも自分が作ったリストしか見れないぞ！
+
+=item *
+
+Follow, unfollow, direct message, block, list, account の操作？そんなもんねぇ！
+
+=back
+
+=head1 Dependencies
+
+=over 2
+
+=item L<perl> >= 5.10
+
+=item L<common::sense>
+
+=item L<opts>
+
+=item L<Any::Moose>
+
+=item L<Moose>
+
+=item L<Mouse>
+
+=item L<Moose::Util::TypeConstraints>
+
+=item L<Mouse::Util::TypeConstraints>
+
+=item L<AnyEvent::Socket>
+
+=item L<AnyEvent::IRC::Util>
+
+=item L<AnyEvent::Twitter>
+
+=item L<AnyEvent::Twitter::Stream>
+
+=item L<Clone>
+
+=item L<Config::Pit>
+
+=item L<DateTime::Format::DateParse>
+
+=item L<HTML::Entities>
+
+=item L<Path::Class>
+
+=item L<Readonly>
+
+=item L<Smart::Comments>
+
+=back
+
+=head1 Author
+
+L<http://twitter.com/c18t>
+
+=head1 Copyright and licence
+
+Copyright (C) 2011, U=Cormorant L<u@chimata.org>.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+See L<http://dev.perl.org/licenses/artistic.html>

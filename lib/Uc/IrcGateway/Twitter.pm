@@ -33,7 +33,7 @@ our @CTCP_COMMAND_LIST_EXTEND = qw(
 );
 
 my $encode = find_encoding($CHARSET);
-my %action = (
+my %action_command = (
     mention    => qr{^me(?:ntion)?$},
     reply      => qr{^re(?:ply)?$},
     favorite   => qr{^f(?:av(?:ou?rites?)?)?$},
@@ -41,6 +41,46 @@ my %action = (
     retweet    => qr{^r(?:etwee)?t$},
     quotetweet => qr{^(?:q[wt]|quote(?:tweet)?)$},
     delete     => qr{^(?:o+p+s+!*|del(?:ete)?)$},
+);
+my @action_command_info = (qq|action commands:|
+,  qq|/me mention (or me): fetch mentions|
+,  qq|/me reply (or re) <tid> <text>: reply to a <tid> tweet|
+,  qq|/me favorite (or f, fav) +<tid>: add <tid> tweets to favorites|
+,  qq|/me unfavorite (or unf, unfav) +<tid>: remove <tid> tweets from favorites|
+,  qq|/me retweet (or rt) +<tid>: retweet <tid> tweets|
+,  qq|/me quotetweet (or qt, qw) <tid> <text>: quotetweet a <tid> tweet, like "<text> QT \@tid_user: tid_tweet"|
+,  qq|/me delete (or del, oops) *<tid> : delete your <tid> tweets. when unset <tid>, delete your last tweet|
+);
+my %api_method = (
+    post => qr {
+        ^statuses
+            /(?:update(?:_with_media)?|destroy|retweet)
+        |
+        ^(?:
+            direct_messages
+            | friendship
+            | favorites
+            | lists
+            | lists/members
+            | lists/subscribers
+            | saved_searchs
+            | blocks
+         )
+            /(?:new|update|create|destroy)
+        |
+        ^account
+            /(?:update|settings|end_session)
+        |
+        ^notifications
+            /(?:follow|leave)
+        |
+        ^geo/place
+        |
+        ^report_spam
+        |
+        ^oauth
+            /(?:access_token|request_token)
+    }x,
 );
 
 
@@ -133,7 +173,6 @@ override '_event_irc_join' => sub {
     my ($self, $handle, $msg) = super();
     return unless $self;
 
-    my $nt   = $handle->{nt};
     my $tmap = $handle->{tmap};
     my $stream_channel   = $handle->options->{stream};
     my $activity_channel = $handle->options->{activity};
@@ -150,7 +189,7 @@ override '_event_irc_join' => sub {
                 token_secret    => $handle->{conf_user}{token_secret},
             );
 
-            $nt->get('users/show', { user_id => $handle->self->{login} }, sub {
+            $self->api($handle, 'users/show', params => { user_id => $handle->self->{login} }, cb => sub {
                 my ($header, $res, $reason) = @_;
                 if ($res) {
                     my $user = $res;
@@ -163,15 +202,15 @@ override '_event_irc_join' => sub {
                     push @{$handle->{timeline}}, $status;
                 }
                 else {
-                    $self->send_msg( $handle, 'NOTICE', qq|topic fetching error: $reason| );
+                    $self->send_cmd( $handle, $self->daemon, 'NOTICE', $stream_channel, qq|topic fetching error: $reason| );
                 }
             });
         }
         elsif ($chan eq $activity_channel) {
-            $nt->get('statuses/mentions', {
+            $self->api($handle, 'statuses/mentions', params => {
                 count => $handle->options->{mention_count},
                 include_rts => $handle->options->{include_rts},
-            }, sub {
+            }, cb => sub {
                 my ($header, $res, $reason) = @_;
                 if ($res) {
                     my $mentions = $res;
@@ -247,10 +286,6 @@ override '_event_irc_privmsg' => sub {
     if (scalar @$ctcp) {
         for my $event (@$ctcp) {
             my ($ctcp_text, $ctcp_args) = @{$event};
-            if ($ctcp_text =~ /$action{reply}|$action{quotetweet}/i) {
-                my $sp = 2;
-                $ctcp_args = join(' ', map { --$sp == 0 ? ':'.$_ : $_ } split(' ', $ctcp_args, $sp));
-            }
             $ctcp_text .= " $ctcp_args" if $ctcp_args;
             $self->handle_ctcp_msg( $handle, $ctcp_text, target => $target );
         }
@@ -258,9 +293,9 @@ override '_event_irc_privmsg' => sub {
     return () unless $text;
 
     if (my $nt = $self->twitter_agent($handle)) {
-        $nt->post('statuses/update', { status => $encode->decode($text) }, sub {
+        $self->api($handle, 'statuses/update', params => { status => $encode->decode($text) }, cb => sub {
             my ($header, $res, $reason) = @_;
-            if (!$res) { $self->send_msg( $handle, 'NOTICE', qq|send error: "$text": $reason| ); }
+            if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, qq|send error: "$text": $reason| ); }
         } );
     }
 };
@@ -302,62 +337,57 @@ sub _event_irc_pin {
 
 override '_event_ctcp_action' => sub {
     my ($self, $handle, $msg) = @_;
-    my $command = $msg->{command} = shift @{$msg->{params}};
+    my ($command, $params) = split(' ', $msg->{params}, 2);
+    my @params = $params ? split(' ', $params) : ();
+    my $target = $msg->{target};
+    @{$msg}{qw/command params/} = ($command, \@params);
 
+    ### $params
     ### $msg
     given ($command) {
-        when (/$action{reply}/) {
+        when (/$action_command{reply}/) {
             break unless check_params($self, $handle, $msg);
 
-            my $nt = $self->twitter_agent($handle);
-            return () unless $nt;
-
-            my ($tid, $text) = @{$msg->{params}}; $text ||= '';
+            my ($tid, $text) = split(' ', $params, 2); $text ||= '';
             my $tweet = $handle->{tmap}->get($tid);
-            $nt->post('statuses/update', {
+            $self->api($handle, 'statuses/update', params => {
                 status => $encode->decode("\@$tweet->{user}{screen_name} $text"), in_reply_to_status_id => $tweet->{id},
-            }, sub {
+            }, cb => sub {
                 my ($header, $res, $reason) = @_;
-                if (!$res) { $self->send_msg( $handle, 'NOTICE', qq|reply error: "$text": $reason| ); }
+                if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target,  qq|reply error: "$text": $reason| ); }
             } );
         }
-        when (/$action{favorite}/) {
+        when (/$action_command{favorite}/) {
             break unless check_params($self, $handle, $msg);
 
-            my $nt = $self->twitter_agent($handle);
-            return () unless $nt;
-
-            for my $tid (@{$msg->{params}}) {
-                $self->tid_event($handle, 'GET', 'favorites/create', $tid);
+            for my $tid (@params) {
+                $self->tid_event($handle, 'favorites/create', $tid, target => $target);
             }
         }
-        when (/$action{unfavorite}/) {
+        when (/$action_command{unfavorite}/) {
             break unless check_params($self, $handle, $msg);
 
             my $nt = $self->twitter_agent($handle);
             return () unless $nt;
 
-            for my $tid (@{$msg->{params}}) {
-                $self->tid_event($handle, 'GET', 'favorites/destroy', $tid);
+            for my $tid (@params) {
+                $self->tid_event($handle, 'favorites/destroy', $tid, target => $target);
             }
         }
-        when (/$action{retweet}/) {
+        when (/$action_command{retweet}/) {
             break unless check_params($self, $handle, $msg);
 
             my $nt = $self->twitter_agent($handle);
             return () unless $nt;
 
-            for my $tid (@{$msg->{params}}) {
-                $self->tid_event($handle, 'POST', 'statuses/retweet', $tid);
+            for my $tid (@params) {
+                $self->tid_event($handle, 'statuses/retweet', $tid, target => $target);
             }
         }
-        when (/$action{quotetweet}/) {
+        when (/$action_command{quotetweet}/) {
             break unless check_params($self, $handle, $msg);
 
-            my $nt = $self->twitter_agent($handle);
-            return () unless $nt;
-
-            my ($tid, $comment) = @{$msg->{params}};
+            my ($tid, $comment) = split(' ', $params, 2);
             my $tweet = $handle->{tmap}->get($tid);
             my $notice = $tweet->{text};
             my $text;
@@ -369,34 +399,24 @@ override '_event_ctcp_action' => sub {
                 $text   = $comment."QT \@$tweet->{user}{screen_name}: $notice";
             }
 
-            $nt->post('statuses/update', { status => $encode->decode($text), in_reply_to_status_id => $tweet->{id} }, sub {
+            $self->api($handle, 'statuses/update', params => {
+                status => $encode->decode($text), in_reply_to_status_id => $tweet->{id},
+            }, cb => sub {
                 my ($header, $res, $reason) = @_;
-                if (!$res) { $self->send_msg( $handle, 'NOTICE', qq|quotetweet error: "$text": $reason| ); }
+                if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, qq|quotetweet error: "$text": $reason| ); }
             } );
         }
-        when (/$action{delete}/) {
+        when (/$action_command{delete}/) {
             break unless check_params($self, $handle, $msg);
 
-            my $nt = $self->twitter_agent($handle);
-            return () unless $nt;
-
-            my @tids = @{$msg->{params}};
+            my @tids = @params;
                @tids = $handle->get_channels($handle->options->{stream})->topic =~ /\[(.+?)\]$/ if not scalar @tids;
             for my $tid (@tids) {
-                $self->tid_event($handle, 'POST', 'statuses/destroy', $tid);
+                $self->tid_event($handle, 'statuses/destroy', $tid, target => $target);
             }
         }
         default {
-            my @text = (qq|action commands:|
-                     ,  qq|\t/me mention (or /$action{mention}/): fetch mentions|
-                     ,  qq|\t/me reply (or /$action{reply}/) <tid> <text>: reply to a <tid> tweet|
-                     ,  qq|\t/me favorite (or /$action{favorite}/) +<tid>: add <tid> tweets to favorites|
-                     ,  qq|\t/me unfavorite (or /$action{unfavorite}/) +<tid>: remove <tid> tweets from favorites|
-                     ,  qq|\t/me retweet (or /$action{retweet}/) +<tid>: retweet <tid> tweets|
-                     ,  qq|\t/me quotetweet (or /$action{quotetweet}/) <tid> <text>: quotetweet a <tid> tweet, like "<text> QT \@target_user: tweet"|
-                     ,  qq|\t/me delete (or /$action{delete}/) *<tid>: delete your <tid> tweets. when unset <tid>, delete your last tweet|
-                     );
-            $self->send_msg( $handle, 'NOTICE', $_) for @text;
+            $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, $_) for @action_command_info;
         }
     }
 };
@@ -404,8 +424,26 @@ override '_event_ctcp_action' => sub {
 
 # IrcGateway::Twitter method #
 
+sub api {
+    my ($self, $handle, $api, %opt) = @_;
+    my $nt = $self->twitter_agent($handle);
+    my $cb = delete $opt{cb} || delete $opt{callback};
+    my %request;
+
+    return unless $nt && $cb;
+
+    $request{$api =~ /^http/ ? 'url' : 'api'} = $api;
+    $request{params} = delete $opt{params} if exists $opt{params};
+    $request{method} = $opt{method}                ? delete $opt{method}
+                     : $api =~ /$api_method{post}/ ? 'POST'
+                                                   : 'GET';
+
+    $nt->request( %request, $cb );
+}
+
 sub tid_event {
-    my ($self, $handle, $method, $api, $tid) = @_;
+    my ($self, $handle, $api, $tid, %opt) = @_;
+    my $target = delete $opt{target} || $handle->self->nick;
     my $tweet = $handle->{tmap}->get($tid);
     my $text = '';
     my @event = split('/', $api);
@@ -414,23 +452,20 @@ sub tid_event {
 
     if (!$tweet) {
         $text = "$event error: no such tid";
-        $self->send_msg( $handle, 'NOTICE', "$text [$tid]" );
+        $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
     }
     else {
-        $handle->{nt}->request(
-            method => $method,
-            api    => $api,
-            params => { id => $tweet->{id} },
-            sub {
-                my ($header, $res, $reason) = @_;
-                if (!$res) { $text = "$event error: $reason"; }
-                else {
-                    $event =~ s/[es]+$//;
-                    $text = "${event}ed: $tweet->{user}{screen_name}: $tweet->{text}";
-                }
-                $self->send_msg( $handle,'NOTICE', "$text [$tid]" );
+        $api .= "/$tweet->{id}";
+        $self->api($handle, $api, cb => sub {
+            my ($header, $res, $reason) = @_;
+            ### $reason
+            if (!$res) { $text = "$event error: $reason"; }
+            else {
+                $event =~ s/[es]+$//;
+                $text = "${event}ed: $tweet->{user}{screen_name}: $tweet->{text}";
             }
-        );
+            $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
+        });
     }
 }
 
@@ -485,10 +520,9 @@ sub new_user {
 
 sub join_channels {
     my ($self, $handle, $retry) = @_;
-    my $nt = $handle->{nt};
     $retry ||= 5 + 1;
 
-    $nt->get('lists/all', sub {
+    $self->api($handle, 'lists/all', cb => sub {
         my ($header, $res, $reason) = @_;
 
         if (!$res && --$retry) {
@@ -530,9 +564,9 @@ sub join_channels {
                     }
 
                     if ($res && $page) {
-                        $nt->get('lists/members', {
+                        $self->api($handle, 'lists/members', params => {
                             list_id => $list->{id}, cursor => $page,
-                        }, $cb);
+                        }, cb => $cb);
                     }
                     else {
                         my $lookup = $handle->get_channels($stream_channel);
@@ -553,9 +587,9 @@ sub join_channels {
                     }
                 };
 
-                $nt->get('lists/members', {
+                $self->api($handle, 'lists/members', params => {
                     list_id => $list->{id}, cursor => $page,
-                }, $cb);
+                }, cb => $cb);
             }
         }
     });
@@ -649,7 +683,7 @@ sub streamer {
                     $text .= " ($dt/$tweet->{id})";
                 }
                 my $notice = "$happen $target->{screen_name}".($text ? ": $text" : "");
-                $self->send_cmd( $handle, $source->{screen_name}, 'NOTICE', $handle->options->{stream}, $notice );
+                $self->send_cmd( $handle, $source->{screen_name}, 'NOTICE', $handle->options->{activity}, $notice );
             }
         },
         on_tweet => sub {
