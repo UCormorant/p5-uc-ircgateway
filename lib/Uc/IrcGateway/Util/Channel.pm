@@ -24,16 +24,19 @@ options:
 
 =cut
 
+has 'name'  => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
+has 'topic' => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
 has 'users' => (
     is => 'ro', traits => ['Hash'], default => sub { {} }, init_arg => undef,
-    isa => 'HashRef[Uc::IrcGateway::Util::User]', handles => {
-        get_users => 'get',
-        set_users => 'set',
-        del_users => 'delete',
-        has_user  => 'defined',
-        user_list => 'keys',
+    isa => 'HashRef', handles => {
+        get_nick   => 'get',
+        join_users => 'set',
+        part_users => 'delete',
+        has_user   => 'defined',
+        login_list => 'keys',
+        nick_list  => 'values',
+        user_count => 'count',
 } );
-has 'topic' => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
 has 'mode' => ( is => 'rw', isa => 'HashRef', default => sub { {
     s => 0, # Secret mode
     p => 0, # Private mode

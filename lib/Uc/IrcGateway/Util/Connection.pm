@@ -13,8 +13,7 @@ methods:
     CHANNEL   = del_channels( CHANNAME [, CHANNAME, ...] )
     BOOL      = has_channel( CHANNAME )
     CHANNAMES = channel_list()
-    USERS     = all_users()
-    CHANNAMES = who_is_channel( USERID )
+    CHANNAMES = who_is_channels( USERID )
 
 properties:
     self     -> Uc::IrcGateway::Util::User # connection's userdata
@@ -37,6 +36,15 @@ has 'channels' => (
         has_channel  => 'defined',
         channel_list => 'keys',
 } );
+has 'users' => (
+    is => 'rw', traits => ['Hash'], default => sub { {} }, init_arg => undef,
+    isa => 'HashRef[Uc::IrcGateway::Util::User]', handles => {
+        get_users => 'get',
+        set_users => 'set',
+        del_users => 'delete',
+        has_user  => 'defined',
+        user_list => 'keys',
+} );
 
 #__PACKAGE__->meta->make_immutable;
 no Any::Moose;
@@ -56,19 +64,12 @@ sub new {
     return $self;
 }
 
-sub all_users {
-    my $self = shift;
-    my @all_users; local $_;
-    push @all_users, %{$_->users} for $self->get_channels($self->channel_list);
-    wantarray ? @all_users : scalar @all_users;
-}
-
-sub who_is_channel {
-    my ($self, $nick) = @_;
+sub who_is_channels {
+    my ($self, $login) = @_;
     my @channels;
 
     for my $chan ($self->channel_list) {
-        push @channels, $chan if $self->get_channels($chan)->has_user($nick);
+        push @channels, $chan if $self->get_channels($chan)->has_user($login);
     }
 
     wantarray ? @channels : scalar @channels;
