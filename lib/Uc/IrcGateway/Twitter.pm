@@ -676,13 +676,13 @@ sub process_tweet {
     elsif ($target_channel_name eq $activity_channel_name) {
         $tweet->{_is_mention} = 1;
         $self->send_cmd( $handle, $user, 'PRIVMSG', $target_channel_name,
-            $text.decorate_text($time, $time_color)." ".decorate_text("[$tmap]", $tid_color) );
+            $text." ".decorate_text("[$tmap]", $tid_color).decorate_text($time, $time_color) );
     }
 
     # not stream
     elsif ($target_channel_name ne $stream_channel_name) {
         $self->send_cmd( $handle, $user, 'PRIVMSG', $target_channel_name,
-            $text.decorate_text($time, $time_color)." ".decorate_text("[$tmap]", $tid_color) );
+            $text." ".decorate_text("[$tmap]", $tid_color).decorate_text($time, $time_color) );
     }
 
     # myself
@@ -722,7 +722,7 @@ sub process_tweet {
         %uniq = ();
         for my $chan (grep { defined && !$uniq{$_}++ } @include_channels) {
             $self->send_cmd( $handle, $user, 'PRIVMSG', $chan,
-                $text.decorate_text($time, $time_color)." ".decorate_text("[$tmap]", $tid_color) );
+                $text." ".decorate_text("[$tmap]", $tid_color).decorate_text($time, $time_color) );
         }
     }
 
@@ -783,10 +783,10 @@ sub join_channels {
                     }
                     else {
                         my $lookup = $handle->get_channels($stream_channel);
+                        $handle->set_channels($chan => Uc::IrcGateway::Util::Channel->new(name => $chan)) if !$handle->has_channel($chan);
                         for my $u (@users) {
                             next if $u->{id} eq $handle->self->login;
                             my $user = new_user($u);
-                            $handle->set_channels($chan => Uc::IrcGateway::Util::Channel->new(name => $chan)) if !$handle->has_channel($chan);
                             if (!$handle->has_user($user->nick)) {
                                 $handle->del_users($lookup->get_nicks($user->login)) if $lookup->has_user($user->login);
                                 $handle->set_users($user->nick => $user);
