@@ -669,7 +669,7 @@ sub process_tweet {
 
     # list action
     if ($notice) {
-        $self->send_cmd( $handle, $user, 'NOTICE', $target_channel_name, "$text$time [$tmap]" );
+        $self->send_cmd( $handle, $user, 'NOTICE', $target_channel_name, "$text [$tmap]$time" );
     }
 
     # mention
@@ -688,8 +688,8 @@ sub process_tweet {
     # myself
     elsif ($nick eq $handle->self->nick) {
         $stream_channel->topic("$text [$tmap]");
-        $self->send_cmd( $handle, $user, 'TOPIC',  $stream_channel_name,   "$text [$tmap]" );
-        $self->send_cmd( $handle, $user, 'NOTICE', $activity_channel_name, "$text [$tmap]" );
+        $self->send_cmd( $handle, $user, 'TOPIC',  $stream_channel_name,   "$text [$tmap]$time" );
+        $self->send_cmd( $handle, $user, 'NOTICE', $activity_channel_name, "$text [$tmap]$time" );
     }
 
     # stream
@@ -710,7 +710,7 @@ sub process_tweet {
         for my $chan ($handle->channel_list) {
             if ($self->check_channel($handle, $chan, joined => 1, silent => 1)) {
                 for my $u (grep { defined && !$uniq{$_}++ } @include_users) {
-                    $tweet->{_is_mention} = 1 if $u == $handle->self->login;
+#                    $tweet->{_is_mention} = 1 if $u == $handle->self->login;
                     push @include_channels, $chan
                         if $u == $handle->self->login && $chan eq $activity_channel_name
                             || $u != $handle->self->login && $chan ne $activity_channel_name && $handle->get_channels($chan)->has_user($u);

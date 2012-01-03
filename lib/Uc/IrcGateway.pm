@@ -3,7 +3,7 @@ package Uc::IrcGateway;
 use 5.010;
 use common::sense;
 use warnings qw(utf8);
-use version; our $VERSION = qv('0.7.1');
+use version; our $VERSION = qv('0.7.2');
 
 use Any::Moose;
 use Any::Moose qw(::Util::TypeConstraints);
