@@ -1,18 +1,15 @@
 - utig.pl's message of the day
 
+    Version 0.7.0
     TODO:
         MySQLと連携する
-        あらゆる入出力を utf8 で書かないと死ぬ。まあこれはだるいからいいや
         うっかりしないための ngword 機能
-        connection に user 情報を全部保存、channel には id のみ記載 -> した
-        チャンネル振り分けのための tweet を解析する関数
-        なんか二重ログインしてるかもしれない -> してなかった
-        CTCP (ACTION)? の実装 -> した
-        自分を含むリストのチャンネルに join できない -> なおした
+        チャンネル振り分けのための tweet を解析する関数 -> process_tweet つくった
+        list, information, conversation, ratelimit コマンド -> つくった
+        tid_color, time_color opition 作成。文字色選べる
         join したチャンネルに発言が流れる仕様
         →自分を含まないリストのチャンネルにも発言が流れちゃう？
-        →→自分の発言はtopicnなので流れない
+        →→自分の発言はtopicなので流れない
         →→自分を含むリストにも一切流れない
         いずれなおす
-        stream の on_event を activity_channel に流すの忘れてた
 

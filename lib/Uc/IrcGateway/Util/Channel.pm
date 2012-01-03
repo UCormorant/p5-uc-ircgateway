@@ -29,7 +29,7 @@ has 'topic' => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
 has 'users' => (
     is => 'ro', traits => ['Hash'], default => sub { {} }, init_arg => undef,
     isa => 'HashRef', handles => {
-        get_nick   => 'get',
+        get_nicks   => 'get',
         join_users => 'set',
         part_users => 'delete',
         has_user   => 'defined',
