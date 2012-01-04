@@ -457,6 +457,84 @@ override '_event_ctcp_action' => sub {
 };
 
 
+# IrcGateway::Twitter subroutines #
+
+sub opt_parser { my %opt; $opt{$1} = $2 ? $2 : 1 while $_[0] =~ /(\w+)(?:=(\S+))?/g; %opt }
+
+sub decorate_text {
+    my ($text, $color) = @_;
+
+    $color ne '' ? "\03$color$text\03" : $text;
+}
+
+sub decode_text {
+    my $text = shift || return '';
+
+    $encode->encode(decode_entities($text));
+}
+
+sub replace_crlf {
+    my $text = shift || return '';
+    $text =~ s/[\r\n]+/ /g;
+
+    $text;
+}
+
+sub validate_text {
+    my $text = shift;
+
+    replace_crlf(decode_text($text));
+}
+
+sub validate_user {
+    my $user = shift;
+    @{$user}{qw/original_name original_url/} = @{$user}{qw/name url/};
+    $user->{name} = validate_text($user->{name});
+    $user->{url}  = validate_text($user->{url});
+    $user->{url}  ||= "http://twitter.com/$user->{screen_name}";
+
+    $user->{_validated}  = 1;
+}
+
+sub validate_tweet {
+    my $tweet = shift;
+    @{$tweet}{qw/original_text original_source/} = @{$tweet}{qw/text source/};
+    $tweet->{text}   = validate_text($tweet->{text});
+    $tweet->{source} = validate_text($tweet->{source});
+
+    validate_user($tweet->{user}) if $tweet->{user};
+
+    $tweet->{_validated} = 1;
+}
+
+sub new_user {
+    my $user = shift;
+    validate_user($user) if !$user->{_validated};
+
+    Uc::IrcGateway::Util::User->new(
+        nick => $user->{screen_name}, login => $user->{id}, realname => $user->{name},
+        host => 'twitter.com', addr => '127.0.0.1', server => $user->{url},
+    );
+}
+
+sub datetime2simple {
+    my ($created_at, $time_zone) = @_;
+    my %opt = ();
+    $opt{time_zone} = $time_zone if $time_zone;
+
+    my $dt_now        = DateTime->now(%opt);
+    my $dt_created_at = DateTime::Format::DateParse->parse_datetime($created_at);
+    $dt_created_at->set_time_zone( $time_zone ) if $time_zone;
+
+    my $date_delta = $dt_now - $dt_created_at;
+    my $time = '';
+       $time = $dt_created_at->hms            if $date_delta->minutes;
+       $time = $dt_created_at->ymd . " $time" if $dt_created_at->day != $dt_now->day;
+
+    $time;
+}
+
+
 # IrcGateway::Twitter method #
 
 sub api {
@@ -535,64 +613,6 @@ sub tid_event {
     }
 }
 
-sub opt_parser { my %opt; $opt{$1} = $2 ? $2 : 1 while $_[0] =~ /(\w+)(?:=(\S+))?/g; %opt }
-
-sub decorate_text {
-    my ($text, $color) = @_;
-
-    $color ne '' ? "\03$color$text\03" : $text;
-}
-
-sub decode_text {
-    my $text = shift || return '';
-
-    $encode->encode(decode_entities($text));
-}
-
-sub replace_crlf {
-    my $text = shift || return '';
-    $text =~ s/[\r\n]+/ /g;
-
-    $text;
-}
-
-sub validate_text {
-    my $text = shift;
-
-    replace_crlf(decode_text($text));
-}
-
-sub validate_user {
-    my $user = shift;
-    @{$user}{qw/original_name original_url/} = @{$user}{qw/name url/};
-    $user->{name} = validate_text($user->{name});
-    $user->{url}  = validate_text($user->{url});
-    $user->{url}  ||= "http://twitter.com/$user->{screen_name}";
-
-    $user->{_validated}  = 1;
-}
-
-sub validate_tweet {
-    my $tweet = shift;
-    @{$tweet}{qw/original_text original_source/} = @{$tweet}{qw/text source/};
-    $tweet->{text}   = validate_text($tweet->{text});
-    $tweet->{source} = validate_text($tweet->{source});
-
-    validate_user($tweet->{user}) if $tweet->{user};
-
-    $tweet->{_validated} = 1;
-}
-
-sub new_user {
-    my $user = shift;
-    validate_user($user) if !$user->{_validated};
-
-    Uc::IrcGateway::Util::User->new(
-        nick => $user->{screen_name}, login => $user->{id}, realname => $user->{name},
-        host => 'twitter.com', addr => '127.0.0.1', server => $user->{url},
-    );
-}
-
 sub lookup_users {
     my ($self, $handle, @reals) = @_;
     my $stream_channel_name = $handle->options->{stream};
@@ -627,9 +647,11 @@ sub process_tweet {
     my $tid_color  = $handle->options->{tid_color}  || '';
     my $time_color = $handle->options->{time_color} || '';
     my $oldnick = $self->lookup_users($handle, $real) || '';
-    my $stream_joined = $self->check_channel($handle, $stream_channel_name, joined => 1, silent => 1);
-    my $target_channel = $handle->get_channels($target_channel_name);
-    my $stream_channel = $handle->get_channels($stream_channel_name);
+    my $stream_joined   = $self->check_channel($handle, $stream_channel_name,   joined => 1, silent => 1);
+    my $activity_joined = $self->check_channel($handle, $activity_channel_name, joined => 1, silent => 1);
+    my $target_channel   = $handle->get_channels($target_channel_name);
+    my $stream_channel   = $handle->get_channels($stream_channel_name);
+    my $activity_channel = $handle->get_channels($activity_channel_name);
 
     if (!$oldnick || !$handle->has_user($oldnick)) {
         $oldnick = '';
@@ -657,15 +679,8 @@ sub process_tweet {
     }
 
     # check time delay
-    my $dt_now        = DateTime->now(time_zone => $self->time_zone);
-    my $dt_created_at = DateTime::Format::DateParse->parse_datetime($tweet->{created_at});
-    $dt_created_at->set_time_zone( $self->time_zone );
-
-    my $date_delta = $dt_now - $dt_created_at;
-    my $time = '';
-       $time = $dt_created_at->hms            if $date_delta->minutes;
-       $time = $dt_created_at->ymd . " $time" if $dt_created_at->day != $dt_now->day;
-       $time = " ($time)"                     if $time;
+    my $time = datetime2simple($tweet->{created_at}, $self->time_zone);
+       $time = " ($time)" if $time;
 
     # list action
     if ($notice) {
@@ -705,22 +720,32 @@ sub process_tweet {
                 push @include_users, $u->login if defined $u;
             }
         }
-
         my %uniq;
+        @include_users = grep { defined && !$uniq{$_}++ } @include_users;
+
         for my $chan ($handle->channel_list) {
             if ($self->check_channel($handle, $chan, joined => 1, silent => 1)) {
-                for my $u (grep { defined && !$uniq{$_}++ } @include_users) {
-#                    $tweet->{_is_mention} = 1 if $u == $handle->self->login;
+                for my $u (@include_users) {
+                    my $is_mention_to_me = $u == $handle->self->login;
+                    my $is_activity      = $chan eq $activity_channel_name;
+                    my $in_channel       = $handle->get_channels($chan)->has_user($u);
+                    if ($is_mention_to_me) {
+#                        $tweet->{_is_mention} = 1;
+                        if ($is_activity && !$activity_channel->has_user($user->login)) {
+                            $activity_channel->join_users($user->login => $user->nick);
+                            $self->send_cmd( $handle, $user, 'JOIN', $activity_channel_name );
+                        }
+                    }
                     push @include_channels, $chan
-                        if $u == $handle->self->login && $chan eq $activity_channel_name
-                            || $u != $handle->self->login && $chan ne $activity_channel_name && $handle->get_channels($chan)->has_user($u);
+                        if $is_mention_to_me && $is_activity || !$is_mention_to_me && !$is_activity && $in_channel;
                 }
             }
         }
         push @include_channels, grep { $_ ne $activity_channel_name } $handle->who_is_channels($real);
 
         %uniq = ();
-        for my $chan (grep { defined && !$uniq{$_}++ } @include_channels) {
+        @include_channels = grep { defined && !$uniq{$_}++ } @include_channels;
+        for my $chan (@include_channels) {
             $self->send_cmd( $handle, $user, 'PRIVMSG', $chan,
                 $text." ".decorate_text("[$tmap]", $tid_color).decorate_text($time, $time_color) );
         }
@@ -904,15 +929,22 @@ sub streamer {
             my $tweet  = $event->{target_object} || {};
 
             if ($target->{id} == $handle->self->login) {
+                my $user = new_user($source);
+                my $activity_channel_name = $handle->options->{activity};
+                my $activity_channel = $handle->get_channels($activity_channel_name);
+                if (!$activity_channel->has_user($user->login)) {
+                    $activity_channel->join_users($user->login => $user->nick);
+                    $self->send_cmd( $handle, $user, 'JOIN', $activity_channel_name );
+                }
+
                 my $text = '';
                 if ($tweet->{text}) {
-                    $text = validate_text($tweet->{text});
-                    my $dt = DateTime::Format::DateParse->parse_datetime($tweet->{created_at});
-                    $dt->set_time_zone( $self->time_zone );
-                    $text .= " ($dt/$tweet->{id})";
+                    my $time = datetime2simple($tweet->{created_at}, $self->time_zone);
+                    $text  = validate_text("$tweet->{text} {id:$tweet->{id}}");
+                    $text .= " ($time)" if $time;
                 }
-                my $notice = "$happen $target->{screen_name}".($text ? ": $text" : "");
-                $self->send_cmd( $handle, $source->{screen_name}, 'NOTICE', $handle->options->{activity}, $notice );
+                my $notice = "$happen ".$handle->self->nick.($text ? ": $text" : "");
+                $self->send_cmd( $handle, $user, 'NOTICE', $handle->options->{activity}, $notice );
             }
         },
         on_tweet => sub {
