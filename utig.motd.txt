@@ -1,8 +1,8 @@
 - utig.pl's message of the day
 
-    Version 0.7.0
+    Version 1.0.0
     TODO:
-        MySQLと連携する
+        MySQLと連携する -> した
         うっかりしないための ngword 機能
         チャンネル振り分けのための tweet を解析する関数 -> process_tweet つくった
         list, information, conversation, ratelimit コマンド -> つくった

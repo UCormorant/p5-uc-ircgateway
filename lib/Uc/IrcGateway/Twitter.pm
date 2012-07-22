@@ -120,6 +120,18 @@ sub BUILD {
         $CTCP_COMMAND_EVENT{"ctcp_$cmd"} = \&{"_event_ctcp_$cmd"};
     }
 
+    eval { require Uc::Twitter::Schema; };
+    unless ($@) {
+        my $mysql = pit_get('mysql', require => {
+            user => '',
+            pass => '',
+        });
+        $self->{schema} = Uc::Twitter::Schema->connect('dbi:mysql:twitter', $mysql->{user}, $mysql->{pass}, {
+            mysql_enable_utf8 => 1,
+            on_connect_do     => ['set names utf8', 'set character set utf8'],
+        });
+    }
+
     $self->reg_cb(
         %IRC_COMMAND_EVENT, %CTCP_COMMAND_EVENT,
 
@@ -634,6 +646,20 @@ sub process_tweet {
     my $nick = $user->{screen_name};
     return unless $nick and $tweet->{text};
 
+    if (ref $self->{schema} eq 'Uc::Twitter::Schema') {
+        my $txn = sub {
+            $self->{schema}->resultset('Status')->find_or_create_from_tweet(
+                $tweet,
+                { user_id => $handle->self->login, ignore_remark_disabling => 1 }
+            );
+        };
+        eval { $self->{schema}->txn_do($txn); };
+        if ($@) {
+            die "the sky is falling!"           #
+              if ($@ =~ /Rollback failed/);     # Rollback failed
+        }
+    }
+
     validate_tweet($tweet);
 
     my $text = $tweet->{text};
@@ -661,7 +687,7 @@ sub process_tweet {
         $self->send_cmd( $handle, $user, 'JOIN', $stream_channel_name ) if $stream_joined;
     }
     else {
-        $user = $handle->get_users($nick);
+        $user = $handle->get_users($oldnick);
     }
 
     if (!$target_channel->has_user($real)) {
