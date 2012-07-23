@@ -1,8 +1,11 @@
 - utig.pl's message of the day
 
-    Version 1.0.0
+    Version 1.1.0
     TODO:
         MySQLと連携する -> した
+        →トランザクションかけて10秒毎にコミットするようにした
+        →切断なら平気だがサーバが死ぬと最大10秒間のデータが消える
+        →まあ10秒くらいならいっかという判断
         うっかりしないための ngword 機能
         チャンネル振り分けのための tweet を解析する関数 -> process_tweet つくった
         list, information, conversation, ratelimit コマンド -> つくった
@@ -12,4 +15,7 @@
         →→自分の発言はtopicなので流れない
         →→自分を含むリストにも一切流れない
         いずれなおす
+        EV: error in callback (ignoring): Can't call method "users" without a package or
+         object reference at lib/Uc/IrcGateway/Twitter.pm line 702.
+        →なんとかせな
 

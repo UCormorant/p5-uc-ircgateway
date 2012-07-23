@@ -27,6 +27,7 @@ options:
 extends 'AnyEvent::Handle', any_moose('::Object');
 has 'self' => ( is => 'rw', isa => 'Uc::IrcGateway::Util::User' );
 has 'options' => ( is => 'rw', isa => 'HashRef', default => sub { {} } );
+has 'on_destroy' => ( is => 'rw', isa => 'CodeRef' );
 has 'channels' => (
     is => 'rw', traits => ['Hash'], default => sub { {} }, init_arg => undef,
     isa => 'HashRef[Uc::IrcGateway::Util::Channel]', handles => {
@@ -73,6 +74,12 @@ sub who_is_channels {
     }
 
     wantarray ? @channels : scalar @channels;
+}
+
+sub DESTROY {
+    my $self = shift;
+    my $ev = $self->on_destroy;
+    $ev->($self) if ref $ev eq 'CODE';
 }
 
 1; # Magic true value required at end of module

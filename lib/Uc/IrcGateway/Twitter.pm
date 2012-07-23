@@ -120,18 +120,6 @@ sub BUILD {
         $CTCP_COMMAND_EVENT{"ctcp_$cmd"} = \&{"_event_ctcp_$cmd"};
     }
 
-    eval { require Uc::Twitter::Schema; };
-    unless ($@) {
-        my $mysql = pit_get('mysql', require => {
-            user => '',
-            pass => '',
-        });
-        $self->{schema} = Uc::Twitter::Schema->connect('dbi:mysql:twitter', $mysql->{user}, $mysql->{pass}, {
-            mysql_enable_utf8 => 1,
-            on_connect_do     => ['set names utf8', 'set character set utf8'],
-        });
-    }
-
     $self->reg_cb(
         %IRC_COMMAND_EVENT, %CTCP_COMMAND_EVENT,
 
@@ -144,6 +132,67 @@ sub BUILD {
 #            warn $_[2];
         },
     );
+
+    eval { require Uc::Twitter::Schema; };
+    if ($@) {
+        $self->reg_cb( do_logging => sub {} );
+    }
+    else {
+        my $mysql = pit_get('mysql', require => {
+            user => '',
+            pass => '',
+        });
+        my $log_capture = sub {
+            my ($handle, $tweet) = @_;
+
+            if (not ref $handle->{_log_schema} eq 'Uc::Twitter::Schema') {
+                $handle->{_log_schema} = Uc::Twitter::Schema->connect('dbi:mysql:twitter', $mysql->{user}, $mysql->{pass}, {
+                    mysql_enable_utf8 => 1,
+                    on_connect_do     => ['set names utf8', 'set character set utf8'],
+                });
+            }
+
+            if (ref $tweet) {
+                push @{$handle->{_raw_tweet}}, $tweet;
+                return;
+            }
+
+            eval { $handle->{_log_schema}->txn_do( sub {
+                while (@{$handle->{_raw_tweet}}) { ### txn_do [===  ]
+                    $handle->{_log_schema}->resultset('Status')->find_or_create_from_tweet(
+                        shift @{$handle->{_raw_tweet}},
+                        { user_id => $handle->self->login, ignore_remark_disabling => 1 }
+                    );
+                }
+                ### txn_do done
+            } ); };
+            if ($@) {
+                ### logging failed
+                if ($@ =~ /Rollback failed/) {
+                    ### Rollback failed
+                    undef $handle;
+                }
+            }
+        };
+
+        my $logger = sub {
+            my ($self, $handle, $tweet) = @_;
+
+            if (not defined $handle->{_log_trigger}) {
+                $handle->{_log_trigger} = AE::timer 10, 10, sub { $self->event( do_logging => $handle ); };
+            }
+
+            if (not $handle->{_log_capture}) {
+                my $code = $handle->on_destroy();
+                $code = ref $code eq 'CODE' ? sub { $log_capture->(@_); $code->(@_) } : $log_capture;
+                $handle->on_destroy($code);
+                $handle->{_log_capture} = 1;
+            }
+
+            $log_capture->($handle, $tweet);
+        };
+        $self->reg_cb( do_logging => $logger );
+    }
 }
 
 
@@ -646,19 +695,8 @@ sub process_tweet {
     my $nick = $user->{screen_name};
     return unless $nick and $tweet->{text};
 
-    if (ref $self->{schema} eq 'Uc::Twitter::Schema') {
-        my $txn = sub {
-            $self->{schema}->resultset('Status')->find_or_create_from_tweet(
-                $tweet,
-                { user_id => $handle->self->login, ignore_remark_disabling => 1 }
-            );
-        };
-        eval { $self->{schema}->txn_do($txn); };
-        if ($@) {
-            die "the sky is falling!"           #
-              if ($@ =~ /Rollback failed/);     # Rollback failed
-        }
-    }
+    my $raw_tweet = clone $tweet;
+    $self->event( do_logging => $handle, $raw_tweet );
 
     validate_tweet($tweet);
 
