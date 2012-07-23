@@ -135,7 +135,11 @@ sub BUILD {
 
     eval { require Uc::Twitter::Schema; };
     if ($@) {
-        $self->reg_cb( do_logging => sub {} );
+        $self->reg_cb(
+            do_logging   => sub {},
+            do_remarking => sub {},
+        );
+
     }
     else {
         my $mysql = pit_get('mysql', require => {
@@ -191,7 +195,27 @@ sub BUILD {
 
             $log_capture->($handle, $tweet);
         };
-        $self->reg_cb( do_logging => $logger );
+
+        my $remarker = sub {
+            my ($self, $handle, $attr) = @_;
+
+            my $id  = delete $attr->{id}  if exists $attr->{id};
+            my $tid = delete $attr->{tid} if exists $attr->{tid};
+            my $tweet = $handle->{tmap}->get($tid) if $tid;
+            $id = $tweet->{id} if $tweet->{id};
+
+            my $columns = { id => $id, user_id => $handle->self->login };
+            for my $col (qw/favorited retweeted/) {
+                $columns->{$col} = delete $attr->{$col} if exists $attr->{$col};
+            }
+
+            $handle->{_log_schema}->resultset('Remark')->update_or_create( $columns );
+        };
+
+        $self->reg_cb(
+            do_logging   => $logger,
+            do_remarking => $remarker,
+        );
     }
 }
 
@@ -383,21 +407,30 @@ override '_event_ctcp_action' => sub {
             break unless check_params($self, $handle, $msg);
 
             for my $tid (@params) {
-                $self->tid_event($handle, 'favorites/create', $tid, target => $target);
+                $self->tid_event($handle, 'favorites/create', $tid, target => $target, cb => sub {
+                    my ($header, $res, $reason) = @_;
+                    $self->event( do_remarking => $handle, { tid => $tid, favorited => 1 } ) if $res;
+                });
             }
         }
         when (/$action_command{unfavorite}/) {
             break unless check_params($self, $handle, $msg);
 
             for my $tid (@params) {
-                $self->tid_event($handle, 'favorites/destroy', $tid, target => $target);
+                $self->tid_event($handle, 'favorites/destroy', $tid, target => $target, cb => sub {
+                    my ($header, $res, $reason) = @_;
+                    $self->event( do_remarking => $handle, { tid => $tid, favorited => 0 } ) if $res;
+                });
             }
         }
         when (/$action_command{retweet}/) {
             break unless check_params($self, $handle, $msg);
 
             for my $tid (@params) {
-                $self->tid_event($handle, 'statuses/retweet', $tid, target => $target);
+                $self->tid_event($handle, 'statuses/retweet', $tid, target => $target, cb => sub {
+                    my ($header, $res, $reason) = @_;
+                    $self->event( do_remarking => $handle, { tid => $tid, retweeted => 1 } ) if $res;
+                });
             }
         }
         when (/$action_command{quotetweet}/) {
@@ -653,8 +686,8 @@ sub tid_event {
     my @event = split('/', $api);
     my $event = $event[1] =~ /(create)|(destroy)/ ? ($2 ? 'un' : '') . $event[0]
                                                   : $event[1];
-    my $cb = exists $opt{cb}       ? delete $opt{cb}
-           : exists $opt{callback} ? delete $opt{callback} : sub {
+    my $cb = $opt{overload} && exists $opt{cb}       ? delete $opt{cb}
+           : $opt{overload} && exists $opt{callback} ? delete $opt{callback} : sub {
         my ($header, $res, $reason) = @_;
         if (!$res) { $text = "$event error: $reason"; }
         else {
@@ -662,6 +695,10 @@ sub tid_event {
             $text = "${event}ed: $tweet->{user}{screen_name}: $tweet->{text}";
         }
         $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
+
+        my $sub = exists $opt{cb}       ? delete $opt{cb}
+                : exists $opt{callback} ? delete $opt{callback} : undef;
+        $sub->(@_) if defined $sub;
     };
 
     if (!$tweet) {

@@ -1,15 +1,12 @@
 - utig.pl's message of the day
 
-    Version 1.1.0
+    Version 1.2.0
     TODO:
         MySQLと連携する -> した
         →トランザクションかけて10秒毎にコミットするようにした
         →切断なら平気だがサーバが死ぬと最大10秒間のデータが消える
         →まあ10秒くらいならいっかという判断
         うっかりしないための ngword 機能
-        チャンネル振り分けのための tweet を解析する関数 -> process_tweet つくった
-        list, information, conversation, ratelimit コマンド -> つくった
-        tid_color, time_color opition 作成。文字色選べる
         join したチャンネルに発言が流れる仕様
         →自分を含まないリストのチャンネルにも発言が流れちゃう？
         →→自分の発言はtopicなので流れない
@@ -18,4 +15,7 @@
         EV: error in callback (ignoring): Can't call method "users" without a package or
          object reference at lib/Uc/IrcGateway/Twitter.pm line 702.
         →なんとかせな
+        ctcp_action と MySQL の連携 -> した
+        → retweet の取り消しできてない
+        on_event と MySQL の連携
 
