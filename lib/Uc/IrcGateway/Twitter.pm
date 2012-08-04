@@ -7,6 +7,7 @@ use warnings qw(utf8);
 use Any::Moose;
 use Any::Moose qw(::Util::TypeConstraints);
 use Uc::IrcGateway;
+use Uc::Twitter::Schema;
 use Net::Twitter::Lite;
 use AnyEvent::Twitter;
 use AnyEvent::Twitter::Stream;
@@ -32,7 +33,7 @@ our @CTCP_COMMAND_LIST_EXTEND = qw(
     action
 );
 
-my $encode = find_encoding($CHARSET);
+my $codec = find_encoding($CHARSET);
 my %action_command = (
     mention      => qr{^me(?:ntion)?$},
     reply        => qr{^re(?:ply)?$},
@@ -54,7 +55,7 @@ my @action_command_info = (qq|action commands:|
 ,  qq|/me unfavorite (or unf, unfav) +<tid>: remove <tid> tweets from favorites|
 ,  qq|/me retweet (or rt) +<tid>: retweet <tid> tweets|
 ,  qq|/me quotetweet (or qt, qw) <tid> <text>: quotetweet a <tid> tweet, like "<text> QT \@tid_user: tid_tweet"|
-,  qq|/me delete (or del, oops) *<tid>: delete your <tid> tweets. when unset <tid>, delete your last tweet|
+,  qq|/me delete (or del, oops) *<tid>: delete your <tid> tweets. if unset <tid>, delete your last tweet|
 ,  qq|/me list (or li) <screen_name>: list <screen_name>'s recent 20 tweets|
 ,  qq|/me information (or in, info) +<tid>: show <tid> tweets information. e.g. retweet_count, has conversation, created_at|
 ,  qq|/me conversation (or co) <tid>: show <tid> tweets conversation|
@@ -133,90 +134,79 @@ sub BUILD {
         },
     );
 
-    eval { require Uc::Twitter::Schema; };
-    if ($@) {
-        $self->reg_cb(
-            do_logging   => sub {},
-            do_remarking => sub {},
-        );
+    my $mysql = pit_get('mysql', require => {
+        user => '',
+        pass => '',
+    });
+    my $log_capture = sub {
+        my ($handle, $tweet) = @_;
 
-    }
-    else {
-        my $mysql = pit_get('mysql', require => {
-            user => '',
-            pass => '',
-        });
-        my $log_capture = sub {
-            my ($handle, $tweet) = @_;
+        if (not ref $handle->{_log_schema} eq 'Uc::Twitter::Schema') {
+            $handle->{_log_schema} = Uc::Twitter::Schema->connect('dbi:mysql:twitter', $mysql->{user}, $mysql->{pass}, {
+                mysql_enable_utf8 => 1,
+                on_connect_do     => ['set names utf8', 'set character set utf8'],
+            });
+        }
 
-            if (not ref $handle->{_log_schema} eq 'Uc::Twitter::Schema') {
-                $handle->{_log_schema} = Uc::Twitter::Schema->connect('dbi:mysql:twitter', $mysql->{user}, $mysql->{pass}, {
-                    mysql_enable_utf8 => 1,
-                    on_connect_do     => ['set names utf8', 'set character set utf8'],
-                });
+        if (ref $tweet) {
+            push @{$handle->{_raw_tweet}}, $tweet;
+            return;
+        }
+
+        eval { $handle->{_log_schema}->txn_do( sub {
+            while (@{$handle->{_raw_tweet}}) { ### txn_do [===  ]
+                $handle->{_log_schema}->resultset('Status')->find_or_create_from_tweet(
+                    shift @{$handle->{_raw_tweet}},
+                    { user_id => $handle->self->login, ignore_remark_disabling => 1 }
+                );
             }
-
-            if (ref $tweet) {
-                push @{$handle->{_raw_tweet}}, $tweet;
-                return;
+            ### txn_do done
+        } ); };
+        if ($@) {
+            ### logging failed
+            if ($@ =~ /Rollback failed/) {
+                ### Rollback failed
+                undef $handle;
             }
+        }
+    };
 
-            eval { $handle->{_log_schema}->txn_do( sub {
-                while (@{$handle->{_raw_tweet}}) { ### txn_do [===  ]
-                    $handle->{_log_schema}->resultset('Status')->find_or_create_from_tweet(
-                        shift @{$handle->{_raw_tweet}},
-                        { user_id => $handle->self->login, ignore_remark_disabling => 1 }
-                    );
-                }
-                ### txn_do done
-            } ); };
-            if ($@) {
-                ### logging failed
-                if ($@ =~ /Rollback failed/) {
-                    ### Rollback failed
-                    undef $handle;
-                }
-            }
-        };
+    my $logger = sub {
+        my ($self, $handle, $tweet) = @_;
 
-        my $logger = sub {
-            my ($self, $handle, $tweet) = @_;
+        if (not defined $handle->{_log_trigger}) {
+            $handle->{_log_trigger} = AE::timer 10, 10, sub { $self->event( do_logging => $handle ); };
+        }
 
-            if (not defined $handle->{_log_trigger}) {
-                $handle->{_log_trigger} = AE::timer 10, 10, sub { $self->event( do_logging => $handle ); };
-            }
+        if (not $handle->{_log_capture}) {
+            my $code = $handle->on_destroy();
+            $code = ref $code eq 'CODE' ? sub { $log_capture->(@_); $code->(@_) } : $log_capture;
+            $handle->on_destroy($code);
+            $handle->{_log_capture} = 1;
+        }
 
-            if (not $handle->{_log_capture}) {
-                my $code = $handle->on_destroy();
-                $code = ref $code eq 'CODE' ? sub { $log_capture->(@_); $code->(@_) } : $log_capture;
-                $handle->on_destroy($code);
-                $handle->{_log_capture} = 1;
-            }
+        $log_capture->($handle, $tweet);
+    };
 
-            $log_capture->($handle, $tweet);
-        };
+    my $remarker = sub {
+        my ($self, $handle, $attr) = @_;
 
-        my $remarker = sub {
-            my ($self, $handle, $attr) = @_;
+        my $id  = delete $attr->{id}  if exists $attr->{id};
+        my $tid = delete $attr->{tid} if exists $attr->{tid};
+        $id = $handle->{tmap}->get($tid) if $tid;
 
-            my $id  = delete $attr->{id}  if exists $attr->{id};
-            my $tid = delete $attr->{tid} if exists $attr->{tid};
-            my $tweet = $handle->{tmap}->get($tid) if $tid;
-            $id = $tweet->{id} if $tweet->{id};
+        my $columns = { id => $id, user_id => $handle->self->login };
+        for my $col (qw/favorited retweeted/) {
+            $columns->{$col} = delete $attr->{$col} if exists $attr->{$col};
+        }
 
-            my $columns = { id => $id, user_id => $handle->self->login };
-            for my $col (qw/favorited retweeted/) {
-                $columns->{$col} = delete $attr->{$col} if exists $attr->{$col};
-            }
+        $handle->{_log_schema}->resultset('Remark')->update_or_create( $columns );
+    };
 
-            $handle->{_log_schema}->resultset('Remark')->update_or_create( $columns );
-        };
-
-        $self->reg_cb(
-            do_logging   => $logger,
-            do_remarking => $remarker,
-        );
-    }
+    $self->reg_cb(
+        do_logging   => $logger,
+        do_remarking => $remarker,
+    );
 }
 
 
@@ -335,7 +325,7 @@ override '_event_irc_privmsg' => sub {
     return () unless $text;
 
     if (my $nt = $self->twitter_agent($handle)) {
-        $self->api($handle, 'statuses/update', params => { status => $encode->decode($text) }, cb => sub {
+        $self->api($handle, 'statuses/update', params => { status => $codec->decode($text) }, cb => sub {
             my ($header, $res, $reason) = @_;
             if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, qq|send error: "$text": $reason| ); }
         } );
@@ -394,14 +384,22 @@ override '_event_ctcp_action' => sub {
         when (/$action_command{reply}/) {
             break unless check_params($self, $handle, $msg);
 
+            $self->event('do_logging', $handle);
             my ($tid, $text) = split(' ', $params, 2); $text ||= '';
-            my $tweet = $handle->{tmap}->get($tid);
-            $self->api($handle, 'statuses/update', params => {
-                status => $encode->decode("\@$tweet->{user}{screen_name} $text"), in_reply_to_status_id => $tweet->{id},
-            }, cb => sub {
-                my ($header, $res, $reason) = @_;
-                if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target,  qq|reply error: "$text": $reason| ); }
-            } );
+            my $tweet_id = $handle->{tmap}->get($tid);
+            my $tweet = $handle->{_log_schema}->resultset('Status')->search( { 'me.id' => $tweet_id }, { prefetch => 'user' } )->first;
+            if (!$tweet) {
+                $text = "reply error: no such tid";
+                $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
+            }
+            else {
+                $self->api($handle, 'statuses/update', params => {
+                    status => '@'.$tweet->user->screen_name.' '.$tweet->text, in_reply_to_status_id => $tweet->id,
+                }, cb => sub {
+                    my ($header, $res, $reason) = @_;
+                    if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target,  qq|reply error: "$text": $reason| ); }
+                } );
+            }
         }
         when (/$action_command{favorite}/) {
             break unless check_params($self, $handle, $msg);
@@ -436,24 +434,32 @@ override '_event_ctcp_action' => sub {
         when (/$action_command{quotetweet}/) {
             break unless check_params($self, $handle, $msg);
 
+            $self->event('do_logging', $handle);
             my ($tid, $comment) = split(' ', $params, 2);
-            my $tweet = $handle->{tmap}->get($tid);
-            my $notice = $tweet->{text};
+            my $tweet_id = $handle->{tmap}->get($tid);
+            my $tweet = $handle->{_log_schema}->resultset('Status')->search( { 'me.id' => $tweet_id }, { prefetch => 'user' } )->first;
             my $text;
-
-            $comment = $comment ? $comment.' ' : '';
-            $text    = $comment."QT \@$tweet->{user}{screen_name}: ".$notice;
-            while (length $text > 140 && $notice =~ /....$/) {
-                $notice =~ s/....$/.../;
-                $text   = $comment."QT \@$tweet->{user}{screen_name}: $notice";
+            if (!$tweet) {
+                $text = "quotetweet error: no such tid";
+                $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
             }
+            else {
+                my $notice = $tweet->text;
 
-            $self->api($handle, 'statuses/update', params => {
-                status => $encode->decode($text), in_reply_to_status_id => $tweet->{id},
-            }, cb => sub {
-                my ($header, $res, $reason) = @_;
-                if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, qq|quotetweet error: "$text": $reason| ); }
-            } );
+                $comment = $comment ? $comment.' ' : '';
+                $text    = $comment.'QT @'.$tweet->user->screen_name.': '.$notice;
+                while (length $text > 140 && $notice =~ /....$/) {
+                    $notice =~ s/....$/.../;
+                    $text   = $comment.'QT @'.$tweet->user->screen_name.': '.$notice;
+                }
+
+                $self->api($handle, 'statuses/update', params => {
+                    status => $codec->decode($text), in_reply_to_status_id => $tweet->id,
+                }, cb => sub {
+                    my ($header, $res, $reason) = @_;
+                    if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, qq|quotetweet error: "$text": $reason| ); }
+                } );
+            }
         }
         when (/$action_command{delete}/) {
             break unless check_params($self, $handle, $msg);
@@ -482,25 +488,32 @@ override '_event_ctcp_action' => sub {
             break unless check_params($self, $handle, $msg);
 
             for my $tid (@params) {
-                my $tweet = $handle->{tmap}->get($tid);
                 my $text;
-
-                if (!$tweet) {
+                my $tweet_id = $handle->{tmap}->get($tid);
+                if (!$tweet_id) {
                     $text = "information error: no such tid";
                     $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
                 }
                 else {
-                    $text  = "information: $tweet->{user}{screen_name}: retweet count $tweet->{retweet_count}: source $tweet->{source}";
-                    $text .= ": conversation" if $tweet->{in_reply_to_status_id};
-                    $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text ($tweet->{created_at}) [$tid]" );
+                    $self->api($handle, "statuses/show/$tweet_id", cb => sub {
+                        my ($header, $res, $reason) = @_;
+                        if ($res) {
+                            my $tweet = $res;
+                            $text  = "information: $tweet->{user}{screen_name}: retweet count $tweet->{retweet_count}: source $tweet->{source}";
+                            $text .= ": conversation" if $tweet->{in_reply_to_status_id};
+                            $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text ($tweet->{created_at}) [$tid]" );
+                        }
+                        else { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, qq|information action error: $reason| ); }
+                    });
                 }
             }
         }
         when (/$action_command{conversation}/) {
             break unless check_params($self, $handle, $msg);
 
+            $self->event('do_logging', $handle);
             my $tid = $params[0];
-            my $tweet = $handle->{tmap}->get($tid);
+            my $tweet_id = $handle->{tmap}->get($tid);
             my @statuses;
             my $limit = 10;
             my $cb; $cb = sub {
@@ -527,7 +540,7 @@ override '_event_ctcp_action' => sub {
                 }
             };
 
-            $self->api($handle, 'statuses/show/'.$tweet->{id}, cb => $cb);
+            $self->api($handle, 'statuses/show/'.$tweet_id, cb => $cb);
         }
         when (/$action_command{ratelimit}/) {
             $self->api($handle, 'account/rate_limit_status', params => { screen_name => $params[0] }, cb => sub {
@@ -564,7 +577,7 @@ sub decorate_text {
 sub decode_text {
     my $text = shift || return '';
 
-    $encode->encode(decode_entities($text));
+    $codec->encode(decode_entities($text));
 }
 
 sub replace_crlf {
@@ -680,8 +693,11 @@ sub get_mentions {
 
 sub tid_event {
     my ($self, $handle, $api, $tid, %opt) = @_;
+    $self->event('do_logging', $handle);
     my $target = delete $opt{target} || $handle->self->nick;
-    my $tweet = $handle->{tmap}->get($tid);
+    my $tweet_id = $handle->{tmap}->get($tid);
+    ### $tweet_id
+    my $tweet = $handle->{_log_schema}->resultset('Status')->search( { 'me.id' => $tweet_id }, { prefetch => 'user' } )->first;
     my $text = '';
     my @event = split('/', $api);
     my $event = $event[1] =~ /(create)|(destroy)/ ? ($2 ? 'un' : '') . $event[0]
@@ -689,10 +705,12 @@ sub tid_event {
     my $cb = $opt{overload} && exists $opt{cb}       ? delete $opt{cb}
            : $opt{overload} && exists $opt{callback} ? delete $opt{callback} : sub {
         my ($header, $res, $reason) = @_;
+        ### $res
+        ### $reason
         if (!$res) { $text = "$event error: $reason"; }
         else {
             $event =~ s/[es]+$//;
-            $text = "${event}ed: $tweet->{user}{screen_name}: $tweet->{text}";
+            $text = $codec->encode("${event}ed: ".$tweet->user->screen_name.": ".$tweet->text);
         }
         $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
 
@@ -706,7 +724,7 @@ sub tid_event {
         $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
     }
     else {
-        $api .= "/$tweet->{id}";
+        $api .= "/$tweet_id";
         $self->api($handle, $api, cb => $cb);
     }
 }
@@ -855,7 +873,7 @@ sub process_tweet {
     $handle->{last_mention_id} = $tweet->{id} if $tweet->{_is_mention};
 
     $user->last_modified(time);
-    push @{$handle->{timeline}}, $tweet;
+    push @{$handle->{timeline}}, $tweet->{id};
 }
 
 sub join_channels {
