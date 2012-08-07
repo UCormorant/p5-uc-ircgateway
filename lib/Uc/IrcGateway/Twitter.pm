@@ -16,6 +16,8 @@ use HTML::Entities qw(decode_entities);
 use DateTime::Format::DateParse;
 use Config::Pit qw(pit_get pit_set);
 use Clone qw(clone);
+use Path::Class;
+use YAML ();
 
 use Data::Dumper;
 #use Smart::Comments;
@@ -237,11 +239,31 @@ override '_event_irc_user' => sub {
         $handle->{conf_app} = $self->conf_app;
     }
 
+    my $path = file($0);
+    my ($dir, $file) = ($path->dir, $path =~ /(\w+(?:\.\w+)*)$/);
+    my $appdir = ".$file";
+    for my $home (qw/HOME USERPROFILE/) {
+        if (exists $ENV{$home} and -e $ENV{$home}) {
+            $dir = $ENV{$home}; last;
+        }
+    }
+    $appdir = dir($dir, $appdir);
+    $appdir->mkpath if not -e $appdir;
+
+    $handle->{conf_app}{config_dir} = $appdir->stringify;
+
     my $conf = $self->servername.'.'.$handle->options->{account};
+    my $config_file = file($handle->{conf_app}{config_dir}, $handle->options->{account}.".yaml");
+    my $fh = $config_file->openr;
+    my $app_data = {};
+    if ($fh) {
+        local $/;
+        $app_data = YAML::Load($fh->getline);
+    }
     $handle->{conf_user} = pit_get( $conf );
     $handle->{tmap} = tie @{$handle->{timeline}}, 'Uc::IrcGateway::Util::TypableMap', shuffled => $handle->options->{shuffle_tid};
-    $handle->users( delete $handle->{conf_user}{users} || {} );
-    $handle->channels( delete $handle->{conf_user}{channels} || {} );
+    $handle->users( delete $app_data->{users} || {} );
+    $handle->channels( delete $app_data->{channels} || {} );
 
     $handle->self->nick($handle->{conf_user}{screen_name}) if exists $handle->{conf_user}{screen_name};
     $handle->self->login($handle->{conf_user}{user_id})    if exists $handle->{conf_user}{user_id};
@@ -342,9 +364,16 @@ override '_event_irc_quit' => sub {
     }
     pit_set( $conf, data => {
         %{$handle->{conf_user}},
-        users    => $handle->users,
-        channels => $handle->channels,
     } );
+    my $config_file = file($handle->{conf_app}{config_dir}, $handle->options->{account}.".yaml");
+    ### $config_file
+    my $fh = $config_file->openw;
+    if ($fh) {
+        $fh->print(YAML::Dump({
+            users    => $handle->users,
+            channels => $handle->channels,
+        }), "\n");
+    }
     undef $handle;
 };
 
@@ -394,7 +423,7 @@ override '_event_ctcp_action' => sub {
             }
             else {
                 $self->api($handle, 'statuses/update', params => {
-                    status => '@'.$tweet->user->screen_name.' '.$tweet->text, in_reply_to_status_id => $tweet->id,
+                    status => '@'.$tweet->user->screen_name.' '.$codec->decode($text), in_reply_to_status_id => $tweet->id,
                 }, cb => sub {
                     my ($header, $res, $reason) = @_;
                     if (!$res) { $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target,  qq|reply error: "$text": $reason| ); }
@@ -444,7 +473,7 @@ override '_event_ctcp_action' => sub {
                 $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
             }
             else {
-                my $notice = $tweet->text;
+                my $notice = $codec->encode($tweet->text);
 
                 $comment = $comment ? $comment.' ' : '';
                 $text    = $comment.'QT @'.$tweet->user->screen_name.': '.$notice;
@@ -540,7 +569,14 @@ override '_event_ctcp_action' => sub {
                 }
             };
 
-            $self->api($handle, 'statuses/show/'.$tweet_id, cb => $cb);
+            if (!$tweet_id) {
+                my $text;
+                $text = "conversation error: no such tid";
+                $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
+            }
+            else {
+                $self->api($handle, 'statuses/show/'.$tweet_id, cb => $cb);
+            }
         }
         when (/$action_command{ratelimit}/) {
             $self->api($handle, 'account/rate_limit_status', params => { screen_name => $params[0] }, cb => sub {

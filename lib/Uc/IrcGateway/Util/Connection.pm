@@ -5,6 +5,9 @@ use common::sense;
 use warnings qw(utf8);
 use Any::Moose;
 
+use Path::Class;
+use Uc::IrcGateway::Util::Schema;
+
 =ignore
 methods:
     HASHREF   = channels()
@@ -45,6 +48,26 @@ has 'users' => (
         del_users => 'delete',
         has_user  => 'defined',
         user_list => 'keys',
+} );
+has 'schema' => ( is => 'ro', isa => 'Uc::IrcGateway::Util::Schema', lazy => 1, builder => sub {
+    my $self = shift;
+    my $path = file($0);
+    my ($dir, $file) = ($path->dir, $path =~ /(\w+(?:\.\w+)?)$/);
+    my $dbdir = ".$file";
+    my $dbfile = $self->options->{account}.".db";
+    for my $home (qw/HOME USERPROFILE/) {
+        if (exists $ENV{$home} and -e $ENV{$home}) {
+            $dir = $ENV{$home}; break;
+        }
+    }
+    $dbfile = file($dir, $dbdir, $dbfile);
+    my $not_exists_db = not -e $dbfile;
+    $dbfile->dir->mkpath if not -e $dbfile->dir;
+    $dbfile->touch if $not_exists_db;
+    my $schema = Uc::IrcGateway::Util::Schema->connect("dbi:SQLite:dbname=$dbfile");
+    $schema->deploy if $not_exists_db;
+
+    return $schema;
 } );
 
 #__PACKAGE__->meta->make_immutable;

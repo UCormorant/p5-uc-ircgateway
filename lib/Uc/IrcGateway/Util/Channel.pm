@@ -29,7 +29,7 @@ has 'topic' => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
 has 'users' => (
     is => 'ro', traits => ['Hash'], default => sub { {} }, init_arg => undef,
     isa => 'HashRef', handles => {
-        get_nicks   => 'get',
+        get_nicks  => 'get',
         join_users => 'set',
         part_users => 'delete',
         has_user   => 'defined',
@@ -51,7 +51,6 @@ has 'mode' => ( is => 'rw', isa => 'HashRef', default => sub { {
 
 __PACKAGE__->meta->make_immutable;
 no Any::Moose;
-
 
 1; # Magic true value required at end of module
 __END__

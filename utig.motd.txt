@@ -1,9 +1,10 @@
 - utig.pl's message of the day
 
-    Version 1.3.0 (branch: tweet_on_db)
+    Version 1.3.1 (branch: tweet_on_db)
 
     省消費メモリ計画
-        perl & database proc で 100MB 強くらいをめざす
+        perl & database proc で 100MB 強くらいをめざす -> うまく行ってるぽい
+        Uc::IG::Util::Logger 作る計画
 
     TODO:
         うっかりしないための ngword 機能
