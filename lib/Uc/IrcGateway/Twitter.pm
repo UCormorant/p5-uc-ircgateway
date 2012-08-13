@@ -202,7 +202,7 @@ sub BUILD {
             $columns->{$col} = delete $attr->{$col} if exists $attr->{$col};
         }
 
-        $handle->{_log_schema}->resultset('Remark')->update_or_create( $columns );
+        $handle->{_log_schema}->resultset('Remark')->update_or_create_with_retweet( $columns );
     };
 
     $self->reg_cb(
@@ -746,7 +746,7 @@ sub tid_event {
         if (!$res) { $text = "$event error: $reason"; }
         else {
             $event =~ s/[es]+$//;
-            $text = $codec->encode("${event}ed: ".$tweet->user->screen_name.": ".$tweet->text);
+            $text = $codec->encode("${event}ed: ".validate_text($tweet->user->screen_name).": ".validate_text($tweet->text));
         }
         $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
 
