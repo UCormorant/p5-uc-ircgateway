@@ -1,19 +1,16 @@
-Build.PL
 Changes
-Changes.txt
+example/echo_server.pl
+example/utig.pl/README.pod
+example/utig.pl/utig.pl
 lib/Uc/IrcGateway.pm
-lib/Uc/IrcGateway/Twitter.pm
-lib/Uc/IrcGateway/Util/Channel.pm
-lib/Uc/IrcGateway/Util/Connection.pm
-lib/Uc/IrcGateway/Util/TypableMap.pm
-lib/Uc/IrcGateway/Util/User.pm
+lib/Uc/IrcGateway/Logger.pm
+lib/Uc/IrcGateway/TypableMap.pm
 Makefile.PL
 MANIFEST			This list of files
 MANIFEST.SKIP
-README
-README.txt
+README.mkdn
 t/00.load.t
-t/perlcritic.t
 t/pod-coverage.t
 t/pod.t
-utig.pl
+xt/manifest.t
+example/utig.pl/utig.pl

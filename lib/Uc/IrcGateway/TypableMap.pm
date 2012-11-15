@@ -1,11 +1,11 @@
-package Uc::IrcGateway::Util::TypableMap;
+package Uc::IrcGateway::TypableMap;
 
+use 5.010;
 use common::sense;
 use warnings qw(utf8);
 use Carp qw(croak);
 use List::Util qw(shuffle);
 use overload '""' => \&tid, '=' => \&tid;
-use Smart::Comments;
 use Any::Moose;
 
 =ignore
@@ -247,14 +247,14 @@ __END__
 
 =head1 NAME
 
-Uc::IrcGateway::Util::TypableMap - [Generate TypableMap Object for Uc::IrcGateway]
+Uc::IrcGateway::TypableMap - [Generate TypableMap Object for Uc::IrcGateway]
 
 
 =head1 SYNOPSIS
 
-    use Uc::IrcGateway::Util::TypableMap;
+    use Uc::IrcGateway::TypableMap;
 
-    my $tmap = Uc::IrcGateway::Util::TypableMap->new(scale => 1);
+    my $tmap = Uc::IrcGateway::TypableMap->new(scale => 1);
     $tmap->push("you suck! [$tmap]"); # you suck! [a]
     $tmap->push("you suck too! [$tmap]"); # you suck too! [i]
     $tmap->push("there is awesome internet! [$tmap]"); # there is awesome internet! [u]
@@ -264,7 +264,7 @@ Uc::IrcGateway::Util::TypableMap - [Generate TypableMap Object for Uc::IrcGatewa
     # or
     
     my @TIMELINE;
-    my $tmap = tie \@TIMELINE, 'Uc::IrcGateway::Util::TypableMap', fixed => 1, shuffled => 1;
+    my $tmap = tie \@TIMELINE, 'Uc::IrcGateway::TypableMap', fixed => 1, shuffled => 1;
     push @TIMELINE, "you suck! [$tmap]"; # you suck! [ka]
     push @TIMELINE, "you suck too! [$tmap]"; # you suck too! [nu]
     push @TIMELINE, "there is awesome internet! [$tmap]"; # there is awesome internet! [pia]
@@ -321,7 +321,7 @@ Uc::IrcGateway::Util::TypableMap - [Generate TypableMap Object for Uc::IrcGatewa
     that can be set. These descriptions must also include details of any
     configuration language used.
   
-Uc::IrcGateway::Util::TypableMap requires no configuration files or environment variables.
+Uc::IrcGateway::TypableMap requires no configuration files or environment variables.
 
 
 =head1 DEPENDENCIES

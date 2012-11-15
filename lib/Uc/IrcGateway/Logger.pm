@@ -1,4 +1,4 @@
-package Uc::IrcGateway::Util::User;
+package Uc::IrcGateway::Logger;
 
 use 5.010;
 use common::sense;
@@ -12,16 +12,74 @@ options:
 
 =cut
 
-has [qw/nick login realname host addr server/] => ( is => 'rw', isa => 'Maybe[Str]', required => 1 );
-has 'mode' => ( is => 'rw', isa => 'HashRef', default => sub { { o => 0, v => 0, } } );
-has 'away_message' => ( is => 'rw', isa => 'Maybe[Str]', default => '' );
-has 'last_modified' => ( is => 'rw', isa => 'Int', default => sub { time } );
 
-__PACKAGE__->meta->make_immutable;
+extends 'Object::Event', any_moose('::Object');
+# gateway
+has 'gateway' => ( is => 'ro', isa => 'Uc::IrcGateway', required => 1 );
+# log method does this function
+has 'logging'   => ( is => 'rw', isa => 'CodeRef', required => 1, default => sub { sub { undef } } );
+# debug method does this function
+has 'debugging' => ( is => 'rw', isa => 'CodeRef', required => 1, default => sub { sub { default_debugger(@_); }; } );
+# log level
+has [qw/log_level log_debug/] => ( is => 'rw', isa => 'Int', default => 0 );
+# DESTORY code
+has 'on_destroy' => ( is => 'rw', isa => 'CodeRef' );
+
+#__PACKAGE__->meta->make_immutable;
 no Any::Moose;
 
-sub to_prefix {
-    return sprintf "%s!%s@%s", $_[0]->nick, $_[0]->login, $_[0]->host;
+sub new {
+    my $class = shift;
+    my $obj = $class->SUPER::new( @_ );
+    return $class->meta->new_object(
+        __INSTANCE__ => $obj,
+        @_,
+    );
+}
+
+sub BUILD {
+    my ($self, $args) = @_;
+
+    for my $key (keys %$args) {
+        next if $self->meta->has_method($key) or $key eq '__INSTANCE__';
+        $self->reg_cb($key => $args->{$key}) if ref $args->{$key} eq 'CODE';
+    }
+}
+
+sub default_debugger {
+    my ($self, $message, %args) = @_;
+
+    say $message;
+}
+
+sub log {
+    my ($self, $message, %args) = @_;
+    $args{level} //= 0;
+    return unless $self->log_level >= $args{level};
+
+    $self->logging->(@_);
+}
+
+sub debug {
+    my ($self, $message, %args) = @_;
+    $args{level} //= 1;
+    return unless $self->log_debug >= $args{level};
+
+    $self->debugging->(@_);
+}
+
+sub AUTOLOAD {
+    our $AUTOLOAD;
+    my $self = shift;
+    (my $method = $AUTOLOAD) =~ s/.*:://;
+
+    $self->event($method, @_);
+}
+
+sub DESTROY {
+    my $self = shift;
+    my $ev = $self->on_destroy;
+    $ev->($self) if ref $ev eq 'CODE';
 }
 
 1; # Magic true value required at end of module
@@ -29,24 +87,15 @@ __END__
 
 =head1 NAME
 
-Uc::IrcGateway::Util::User - [One line description of module's purpose here]
-
-
-=head1 VERSION
-
-This document describes Uc::IrcGateway::Util::User
+Uc::IrcGateway::Logger - 
 
 
 =head1 SYNOPSIS
 
-    use Uc::IrcGateway::Util::User;
-
 =for author to fill in:
-    Brief code example(s) here showing commonest usage(s).
-    This section will be as far as many users bother reading
-    so make it as educational and exeplary as possible.
-  
-  
+    Write synopsis
+
+
 =head1 DESCRIPTION
 
 =for author to fill in:
@@ -95,7 +144,7 @@ This document describes Uc::IrcGateway::Util::User
     that can be set. These descriptions must also include details of any
     configuration language used.
   
-Uc::IrcGateway::Util::User requires no configuration files or environment variables.
+Uc::IrcGateway::Logger requires no configuration files or environment variables.
 
 
 =head1 DEPENDENCIES
@@ -135,7 +184,7 @@ None reported.
 No bugs have been reported.
 
 Please report any bugs or feature requests to
-C<bug-uc-ircgateway-util-user@rt.cpan.org>, or through the web interface at
+C<bug-uc-ircgateway-util-typablemap@rt.cpan.org>, or through the web interface at
 L<http://rt.cpan.org>.
 
 

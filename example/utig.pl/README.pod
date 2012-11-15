@@ -63,7 +63,12 @@ UserStream を使用して閲覧するので発言が即座に流れてくるぞ
   ,  qq|/me unfavorite (or unf, unfav) +<tid>: remove <tid> tweets from favorites|
   ,  qq|/me retweet (or rt) +<tid>: retweet <tid> tweets|
   ,  qq|/me quotetweet (or qt, qw) <tid> <text>: quotetweet a <tid> tweet, like "<text> QT \@tid_user: tid_tweet"|
-  ,  qq|/me delete (or del, oops) *<tid> : delete your <tid> tweets. when unset <tid>, delete your last tweet|
+  ,  qq|/me delete (or del, oops) *<tid>: delete your <tid> tweets. if unset <tid>, delete your last tweet|
+  ,  qq|/me list (or li) <screen_name>: list <screen_name>'s recent 20 tweets|
+  ,  qq|/me information (or in, info) +<tid>: show <tid> tweets information. e.g. retweet_count, has conversation, created_at|
+  ,  qq|/me conversation (or co) <tid>: show <tid> tweets conversation|
+  ,  qq|/me ratelimit (or rate, limit): show remaining api hit counts|
+  ,  qq|/me ngword (or ng) <text>: set/delete a NG word. if unset <text>, show all NG words|
   );
 
 こんなかんじだ！
@@ -78,6 +83,7 @@ Lists 対応。ただしリストに入れていてもフォローしてない�
 =item *
 
 Follow, unfollow, direct message, block, list, account の操作？そんなもんねぇ！
+(いつか対応予定です)
 
 =back
 
@@ -87,7 +93,7 @@ Follow, unfollow, direct message, block, list, account の操作？そんなも�
 
 =item L<perl> >= 5.10
 
-=item L<common::sense>
+=item L<common::sense> >= 3.6
 
 =item L<opts>
 
@@ -101,9 +107,13 @@ Follow, unfollow, direct message, block, list, account の操作？そんなも�
 
 =item L<Mouse::Util::TypeConstraints>
 
+=item L<MouseX::NativeTraits>
+
 =item L<AnyEvent::Socket>
 
 =item L<AnyEvent::IRC::Util>
+
+=item L<Net::Twitter::Lite>
 
 =item L<AnyEvent::Twitter>
 
@@ -113,6 +123,10 @@ Follow, unfollow, direct message, block, list, account の操作？そんなも�
 
 =item L<Config::Pit>
 
+=item L<YAML>
+
+=item L<DateTime::Format::HTTP>
+
 =item L<DateTime::Format::DateParse>
 
 =item L<HTML::Entities>
@@ -120,8 +134,6 @@ Follow, unfollow, direct message, block, list, account の操作？そんなも�
 =item L<Path::Class>
 
 =item L<Readonly>
-
-=item L<Smart::Comments>
 
 =back
 
@@ -131,7 +143,7 @@ L<http://twitter.com/c18t>
 
 =head1 Copyright and licence
 
-Copyright (C) 2011, U=Cormorant L<u@chimata.org>.
+Copyright (C) 2011-2012, U=Cormorant L<u@chimata.org>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
