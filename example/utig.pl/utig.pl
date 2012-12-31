@@ -351,8 +351,6 @@ sub _event_irc_pin {
     my $conf = $self->servername.'.'.$handle->options->{account};
     pit_set( $conf, data => {
         %{$handle->{conf_user}},
-        users    => $handle->users,
-        channels => $handle->channels,
     } ) if $nt->{config_updated};
 }
 
@@ -458,10 +456,10 @@ override '_event_ctcp_action' => sub {
             }
         }
         when (/$action_command{delete}/) {
-            break unless check_params($self, $handle, $msg);
-
             my @tids = @params;
                @tids = $handle->get_channels($handle->options->{stream})->topic =~ /\[(.+?)\]$/ if not scalar @tids;
+
+            break if not scalar @tids;
             for my $tid (@tids) {
                 $self->tid_event($handle, 'statuses/destroy', $tid, target => $target);
             }

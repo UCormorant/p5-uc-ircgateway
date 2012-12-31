@@ -35,7 +35,7 @@ auto_set_repository;
 
 test_requires 'Test::More' => '0.94'; # for subtest
 
-requires 'common::sense' => 0; # I want to set '3.6', but common::sense do not have $VERSION !
+requires 'common::sense' => 0; # I want to set '3.6', but common::sense does not have $VERSION !
 
 tests_recursive;
 recursive_author_tests 'xt';
