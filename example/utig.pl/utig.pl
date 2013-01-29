@@ -1,8 +1,8 @@
 #!/usr/local/bin/perl
 
-use 5.010;
-use common::sense;
-use warnings qw(utf8);
+use 5.014;
+use warnings;
+use utf8;
 
 use Readonly;
 Readonly my $CHARSET => ($^O eq 'MSWin32' ? 'cp932' : 'utf8');
@@ -42,15 +42,14 @@ BEGIN {
 
 package Uc::TwitterIrcGateway;
 
-use 5.010;
-use common::sense;
-use warnings qw(utf8);
+use 5.014;
+use warnings;
+use utf8;
 
 use lib qw(../../lib);
 use Any::Moose;
 use Uc::IrcGateway;
-use Uc::IrcGateway::TypableMap;
-use Uc::Twitter::Schema;
+use Uc::Model::Twitter;
 use Net::Twitter::Lite;
 use AnyEvent::Twitter;
 use AnyEvent::Twitter::Stream;
@@ -59,7 +58,7 @@ use DateTime::Format::DateParse;
 use Config::Pit qw(pit_get pit_set);
 use Scalar::Util qw(refaddr);
 use Clone qw(clone);
-use Path::Class;
+use Path::Class qw(file dir);
 use YAML ();
 use Data::Dumper;
 
@@ -165,14 +164,16 @@ sub BUILD {
                 return;
             }
 
-            eval { $self->{schema}->txn_do( sub {
+            eval {
+                my $txn = $self->{schema}->txn_scope;
                 while (my $q = shift @{$self->{queue}}) {
-                    $self->{schema}->resultset('Status')->find_or_create_from_tweet(
+                    $self->{schema}->find_or_create_status_from_tweet(
                         $q->{tweet},
                         { user_id => $q->{user}->login, ignore_remark_disabling => 1 }
                     );
                 }
-            } ); };
+                $txn->commit;
+            };
 
             if ($@ && exists $args{handle}) {
                 $self->debug($@, handle => $args{handle});
@@ -195,17 +196,17 @@ sub BUILD {
                 $columns->{$col} = delete $attr->{$col} if exists $attr->{$col};
             }
 
-            $self->{schema}->resultset('Remark')->update_or_create_with_retweet( $columns );
+            $self->{schema}->update_or_create_remark_with_retweet( $columns );
         },
     );
     my $mysql = pit_get('mysql', require => {
         user => '',
         pass => '',
     });
-    $logger->{schema} = Uc::Twitter::Schema->connect('dbi:mysql:twitter', $mysql->{user}, $mysql->{pass}, {
+    $logger->{schema} = Uc::Model::Twitter->new( connect_info => ['dbi:mysql:twitter', $mysql->{user}, $mysql->{pass}, {
         mysql_enable_utf8 => 1,
         on_connect_do     => ['set names utf8mb4'],
-    });
+    }]);
     $logger->{trigger} = AE::timer 10, 10, sub { $logger->log; };
 
     $self->logger($logger);
@@ -379,7 +380,7 @@ override '_event_ctcp_action' => sub {
 
             $self->logger->log();
             my $tweet_id = $handle->{tmap}->get($tid);
-            my $tweet = $self->logger->{schema}->resultset('Status')->search( { 'me.id' => $tweet_id }, { prefetch => 'user' } )->first;
+            my $tweet = $self->logger->{schema}->search('status', { id => $tweet_id })->next;
             if (!$tweet) {
                 $text = "reply error: no such tid";
                 $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
@@ -431,7 +432,7 @@ override '_event_ctcp_action' => sub {
 
             $self->logger->log();
             my $tweet_id = $handle->{tmap}->get($tid);
-            my $tweet = $self->logger->{schema}->resultset('Status')->search( { 'me.id' => $tweet_id }, { prefetch => 'user' } )->first;
+            my $tweet = $self->logger->{schema}->search('status', { id => $tweet_id })->next;
             my $text;
             if (!$tweet) {
                 $text = "quotetweet error: no such tid";
@@ -596,10 +597,14 @@ sub validate_text {
 
 sub validate_user {
     my $user = shift;
-    @{$user}{qw/original_name original_url/} = @{$user}{qw/name url/};
-    $user->{name} = validate_text($user->{name});
-    $user->{url}  = validate_text($user->{url});
-    $user->{url}  ||= "https://twitter.com/$user->{screen_name}";
+    my @target_val = qw/name url location description/;
+    my @escape = map { 'original_'.$_ } @target_val;
+    @{$user}{@escape} = @{$user}{@target_val};
+    $user->{name}        = validate_text($user->{name});
+    $user->{url}         = validate_text($user->{url});
+    $user->{location}    = validate_text($user->{location});
+    $user->{description} = validate_text($user->{description});
+    $user->{url} ||= "https://twitter.com/$user->{screen_name}";
 
     $user->{_validated} = 1;
 }
@@ -623,6 +628,7 @@ sub new_user {
         registered => 1,
         nick => $user->{screen_name}, login => $user->{id}, realname => $user->{name},
         host => 'twitter.com', addr => '127.0.0.1', server => $user->{url},
+        away_message => $user->{location}, userinfo => $user->{description},
     );
 }
 
@@ -698,7 +704,7 @@ sub tid_event {
     $self->logger->log();
     my $target = delete $opt{target} || $handle->self->nick;
     my $tweet_id = $handle->{tmap}->get($tid);
-    my $tweet = $self->logger->{schema}->resultset('Status')->search( { 'me.id' => $tweet_id }, { prefetch => 'user' } )->first;
+    my $tweet = $self->logger->{schema}->search('status', { id => $tweet_id })->next;
     my $text = '';
     my @event = split('/', $api);
     my $event = $event[1] =~ /(create)|(destroy)/ ? ($2 ? 'un' : '') . $event[0]
@@ -738,6 +744,7 @@ sub lookup_users {
 
 sub check_ngword {
     my ($self, $handle, $msgtext) = @_;
+    $msgtext //= '';
     if ($msgtext =~ /^\s/) {
         $msgtext =~ s/^\s+/\001/; $msgtext .= "\001";
     }
@@ -757,14 +764,15 @@ sub check_ngword {
 sub process_tweet {
     my ($self, $handle, %opt) = @_;
 
-    my $target = delete $opt{target};
-    my $tweet  = delete $opt{tweet};
-    my $notice = delete $opt{notice};
-    my $user   = $tweet->{user};
+    my $target    = delete $opt{target};
+    my $tweet     = delete $opt{tweet};
+    my $notice    = delete $opt{notice};
+    my $skip_join = delete $opt{skip_join};
+    my $user      = $tweet->{user};
     return unless $user;
 
-    my $real = $user->{id};
-    my $nick = $user->{screen_name};
+    my $login = $user->{id};
+    my $nick  = $user->{screen_name};
     return unless $nick and $tweet->{text};
 
     my $raw_tweet = clone $tweet;
@@ -779,9 +787,9 @@ sub process_tweet {
     return unless $self->check_channel($handle, $target_channel_name, joined => 1, silent => 1);
 
     my $tmap = $handle->{tmap};
-    my $tid_color  = $handle->options->{tid_color}  || '';
-    my $time_color = $handle->options->{time_color} || '';
-    my $oldnick = $self->lookup_users($handle, $real) || '';
+    my $old_user   = $handle->get_users($login);
+    my $tid_color  = $handle->options->{tid_color}  // '';
+    my $time_color = $handle->options->{time_color} // '';
     my $target_joined   = $self->check_channel($handle, $target_channel_name,   joined => 1, silent => 1);
     my $stream_joined   = $self->check_channel($handle, $stream_channel_name,   joined => 1, silent => 1);
     my $activity_joined = $self->check_channel($handle, $activity_channel_name, joined => 1, silent => 1);
@@ -789,28 +797,45 @@ sub process_tweet {
     my $stream_channel   = $handle->get_channels($stream_channel_name);
     my $activity_channel = $handle->get_channels($activity_channel_name);
 
-    if (!$oldnick || !$handle->has_user($real)) {
-        $oldnick = '';
+    my $real = $user->{name};
+    my $url  = $user->{url};
+    my $loc  = $user->{location};
+    my $desc = $user->{description};
+
+    my %old_status;
+    my %new_status = (
+        nick => $nick, real => $real,
+        url  => $url,  loc  => $loc,  desc => $desc,
+    );
+    if (!$old_user) {
         $user = new_user($user);
         $handle->set_users($user);
-        $stream_channel->join_users($real => $nick);
-        $self->send_cmd( $handle, $user, 'JOIN', $stream_channel_name ) if $stream_joined;
+        if (!$skip_join) {
+            $stream_channel->join_users($login => $nick);
+            $self->send_cmd( $handle, $user, 'JOIN', $stream_channel_name ) if $stream_joined;
+        }
     }
     else {
-        $user = $handle->get_users($real);
-    }
+        $user = $handle->get_users($login);
+        $old_status{nick} = $user->nick;
+        $old_status{real} = $user->realname;
+        $old_status{url}  = $user->server;
+        $old_status{loc}  = $user->away_message;
+        $old_status{desc} = $user->userinfo;
 
-    if (!$target_channel->has_user($real)) {
-        $target_channel->join_users($real => $nick);
-        $self->send_cmd( $handle, $user, 'JOIN', $target_channel_name ) if $target_joined;
-    }
-
-    if ($oldnick && $oldnick ne $nick) {
         $user->nick($nick);
-        for my $chan ($handle->who_is_channels($real)) {
-            $handle->get_channels($chan)->users->{$real} = $nick;
-        }
-        $self->send_cmd( $handle, $user, 'NICK', $nick );
+        $user->realname($real);
+        $user->server($url);
+        $user->away_message($loc);
+        $user->userinfo($desc);
+
+        $self->notice_profile_update($handle, $user, \%old_status, \%new_status);
+    }
+
+    # join the target channel
+    if (!$skip_join && !$target_channel->has_user($login)) {
+        $target_channel->join_users($login => $nick);
+        $self->send_cmd( $handle, $user, 'JOIN', $target_channel_name ) if $target_joined;
     }
 
     # check time delay
@@ -866,7 +891,7 @@ sub process_tweet {
                     my $in_channel       = $handle->get_channels($chan)->has_user($u);
                     if ($is_mention_to_me) {
 #                        $tweet->{_is_mention} = 1;
-                        if ($is_activity && !$activity_channel->has_user($user->login)) {
+                        if ($is_activity && !$skip_join && !$activity_channel->has_user($user->login)) {
                             $activity_channel->join_users($user->login => $user->nick);
                             $self->send_cmd( $handle, $user, 'JOIN', $activity_channel_name );
                         }
@@ -876,13 +901,13 @@ sub process_tweet {
                 }
             }
         }
-        push @include_channels, grep { $_ ne $activity_channel_name } $handle->who_is_channels($real);
+        push @include_channels, grep { $_ ne $activity_channel_name } $handle->who_is_channels($login);
 
         %uniq = ();
-        @include_channels = grep { defined && !$uniq{$_}++ } @include_channels;
-        for my $chan (@include_channels) {
+        for my $chan (grep { defined && !$uniq{$_}++ } @include_channels) {
             $self->send_cmd( $handle, $user, 'PRIVMSG', $chan,
-                $text." ".decorate_text("[$tmap]", $tid_color).decorate_text($time, $time_color) );
+                $text." ".decorate_text("[$tmap]", $tid_color).decorate_text($time, $time_color) )
+                    if $self->check_channel($handle, $chan, joined => 1, silent => 1);
         }
     }
 
@@ -890,6 +915,119 @@ sub process_tweet {
 
     $user->last_modified(time);
     push @{$handle->{timeline}}, $tweet->{id};
+}
+
+sub process_event {
+    my ($self, $handle, %opt) = @_;
+
+    my $event  = delete $opt{event};
+    my $target = $event->{target};
+    my $source = $event->{source};
+    my $happen = $event->{event};
+    my $tweet  = $event->{target_object} // {};
+    my $time   = $event->{created_at};
+    return unless $event and $happen;
+
+    my $login = $source->{id};
+    my $nick  = $source->{screen_name};
+    return unless $login and $nick;
+
+    # ログインユーザがターゲット
+    if ($target->{id} == $handle->self->login) {
+        given (lc $happen) {
+#            when ('favorite')   { ... } # Tweet
+#            when ('unfavorite') { ... } # Tweet
+#            when ('follow')     { ... } # Null
+#            when ('list_member_added')        { ... } # List
+#            when ('list_member_removed')      { ... } # List
+#            when ('list_member_subscribed')   { ... } # List
+#            when ('list_member_unsubscribed') { ... } # List
+            default {
+                validate_user($source);
+                my $user = $handle->get_users($login) // new_user($source);
+                my (%old_status, %new_status);
+                my @status_keys = qw/nick real url loc desc/;
+                my @source_keys = qw/screen_name name url location description/;
+                $old_status{nick} = $user->nick;
+                $old_status{real} = $user->realname;
+                $old_status{url}  = $user->server;
+                $old_status{loc}  = $user->away_message;
+                $old_status{desc} = $user->userinfo;
+                @new_status{@status_keys} = @{$source}{@source_keys};
+
+                $user->nick($source->{screen_name});
+                $user->realname($source->{name});
+                $user->server($source->{url});
+                $user->away_message($source->{location});
+                $user->userinfo($source->{description});
+
+                $self->notice_profile_update($handle, $user, \%old_status, \%new_status);
+                my $activity_channel_name = $handle->options->{activity};
+                my $activity_channel = $handle->get_channels($activity_channel_name);
+                if (!$activity_channel->has_user($user->login)) {
+                    $activity_channel->join_users($user->login => $user->nick);
+                    $self->send_cmd( $handle, $user, 'JOIN', $activity_channel_name );
+                }
+
+                my $text = '';
+                if ($tweet->{text}) {
+                    my $time = datetime2simple($tweet->{created_at}, $self->time_zone);
+                    $text  = validate_text("$tweet->{text} {id:$tweet->{id}}");
+                    $text .= " ($time)" if $time;
+                }
+                my $notice = "$happen ".$handle->self->nick.($text ? ": $text" : "");
+                $self->send_cmd( $handle, $user, 'NOTICE', $activity_channel_name, $notice );
+            }
+        }
+    }
+
+    # ログインユーザの発生させたイベント
+    elsif ($source->{id} == $handle->self->login) {
+#        given (lc $happen) {
+#            when ('user_update') { ... } # Null
+#            when ('block')       { ... } # Null
+#            when ('unblock')     { ... } # Null
+#            when ('favorite')    { ... } # Tweet
+#            when ('unfavorite')  { ... } # Tweet
+#            when ('follow')      { ... } # Null
+#            when ('unfollow')    { ... } # Null
+#            when ('list_created')   { ... } # List
+#            when ('list_destroyed') { ... } # List
+#            when ('list_updated')   { ... } # List
+#            when ('list_member_added')        { ... } # List
+#            when ('list_member_removed')      { ... } # List
+#            when ('list_member_subscribed')   { ... } # List
+#            when ('list_member_unsubscribed') { ... } # List
+#        }
+    }
+}
+
+sub notice_profile_update {
+    my ($self, $handle, $user, $old, $new) = @_;
+    my $activity_channel_name = $handle->options->{activity};
+    my $activity_joined       = $self->check_channel($handle, $activity_channel_name, joined => 1, silent => 1);
+    my %change_message        = (
+        nick => 'account name', real => 'profile name',
+        url  => 'website',      loc  => 'location',     desc => 'description',
+    );
+    if ($old->{nick} ne $new->{nick}) {
+        for my $chan ($handle->who_is_channels($new->{login})) {
+            $handle->get_channels($chan)->join_users($new->{login} => $new->{nick});
+        }
+        $self->send_cmd( $handle, $user, 'NICK', $new->{nick} );
+
+        my $mes = "changed $change_message{nick} '$old->{nick}' to '$new->{nick}'";
+        $self->send_cmd( $handle, $user, 'NOTICE', $activity_channel_name, $mes ) if $activity_joined;
+    }
+    if ($activity_joined) {
+        for (sort grep { $_ ne 'desc' } keys %$new) {
+            if ($old->{$_} ne $new->{$_}) {
+                my $mes = "changed $change_message{$_} '$old->{$_}' to '$new->{$_}'";
+                $self->send_cmd( $handle, $user, 'NOTICE', $activity_channel_name, $mes ) if $activity_joined;
+            }
+        }
+        $self->send_cmd( $handle, $user, 'NOTICE', $activity_channel_name, "changed $change_message{desc}" ) if $old->{desc} ne $new->{desc};
+    }
 }
 
 sub join_channels {
@@ -1107,35 +1245,14 @@ sub streamer {
             $self->streamer(handle => $handle, %config);
         },
         on_error => sub {
-            warn "error: $_[0]";
+            my $msg = "error: $_[0]";
+            warn $msg; $self->send_cmd( $handle, $self->daemon, 'NOTICE', $handle->options->{stream}, $msg );
             delete $handle->{streamer};
             $self->streamer(handle => $handle, %config);
         },
         on_event => sub {
             my $event = shift;
-            my $happen = $event->{event};
-            my $source = $event->{source};
-            my $target = $event->{target};
-            my $tweet  = $event->{target_object} || {};
-
-            if ($target->{id} == $handle->self->login) {
-                my $user = new_user($source);
-                my $activity_channel_name = $handle->options->{activity};
-                my $activity_channel = $handle->get_channels($activity_channel_name);
-                if (!$activity_channel->has_user($user->login)) {
-                    $activity_channel->join_users($user->login => $user->nick);
-                    $self->send_cmd( $handle, $user, 'JOIN', $activity_channel_name );
-                }
-
-                my $text = '';
-                if ($tweet->{text}) {
-                    my $time = datetime2simple($tweet->{created_at}, $self->time_zone);
-                    $text  = validate_text("$tweet->{text} {id:$tweet->{id}}");
-                    $text .= " ($time)" if $time;
-                }
-                my $notice = "$happen ".$handle->self->nick.($text ? ": $text" : "");
-                $self->send_cmd( $handle, $user, 'NOTICE', $handle->options->{activity}, $notice );
-            }
+            $self->process_event($handle, event => $event);
         },
         on_tweet => sub {
             my $tweet = shift;

@@ -1,10 +1,7 @@
-use Test::More tests => 3;
+use Test::More tests => 1;
 
 BEGIN {
 use_ok( 'Uc::IrcGateway' );
-use_ok( 'Uc::IrcGateway::Twitter' );
-use_ok( 'Uc::IrcGateway::Util::User' );
-use_ok( 'Uc::IrcGateway::Util::TypableMap' );
 }
 
-diag( "Testing Uc::IrcGateway $Uc::IrcGateway::VERSION" );
+diag( "Testing Uc::IrcGateway::Twitter ".$Uc::IrcGateway::VERSION );
