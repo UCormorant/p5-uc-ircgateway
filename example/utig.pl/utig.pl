@@ -1011,8 +1011,8 @@ sub notice_profile_update {
         url  => 'website',      loc  => 'location',     desc => 'description',
     );
     if ($old->{nick} ne $new->{nick}) {
-        for my $chan ($handle->who_is_channels($new->{login})) {
-            $handle->get_channels($chan)->join_users($new->{login} => $new->{nick});
+        for my $chan ($handle->who_is_channels($user->login)) {
+            $handle->get_channels($chan)->join_users($user->login => $new->{nick});
         }
         $self->send_cmd( $handle, $user, 'NICK', $new->{nick} );
 

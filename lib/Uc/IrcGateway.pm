@@ -1,4 +1,4 @@
-package Uc::IrcGateway v2.1.0;
+package Uc::IrcGateway v2.1.1;
 
 use 5.014;
 use warnings;
@@ -1832,7 +1832,7 @@ Uc::IrcGateway - [One line description of module's purpose here]
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version 2.1.0
+This document describes Uc::IrcGateway version 2.1.1
 
 
 =head1 SYNOPSIS

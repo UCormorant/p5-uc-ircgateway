@@ -11,8 +11,10 @@ BEGIN {
     my @not_available;
 
     {
-        local *STDOUT;
-        eval qq{use inc::Module::Install; 1;} or push @not_available, 'inc::Module::Install';
+        select my $LOCALOUT;
+        # use inc::Module::Install 0.69; # for configure_requires
+        eval qq{use inc::Module::Install 0.69; 1;} or push @not_available, 'inc::Module::Install';
+        select STDOUT;
     }
 
     for my $mod (@devmods) {
@@ -27,15 +29,29 @@ BEGIN {
     }
 }
 
-use inc::Module::Install 0.69; # for configure_requires
-
 name 'Uc-IrcGateway';
 reference_module 'lib/Uc/IrcGateway.pm';
 auto_set_repository;
 
 test_requires 'Test::More' => '0.94'; # for subtest
 
-requires 'common::sense' => 0; # I want to set '3.6', but common::sense does not have $VERSION !
+requires 'Mouse' => '1.04';
+requires 'Any::Moose' => '0.11'; # for ::Util::TypeConstraints
+requires 'AnyEvent' => '7.04';
+requires 'AnyEvent::IRC' => '0.6'; # for is_nick_prefix, join_prefix
+requires 'Path::Class' => '0.29';
+requires 'UNIVERSAL::which' => '0.06';
+
+# utig.pl
+requires 'Uc::Model::Twitter' => '1.00';
+requires 'Net::Twitter::Lite';
+requires 'AnyEvent::Twitter';
+requires 'AnyEvent::Twitter::Stream';
+requires 'HTML::Entities';
+requires 'DateTime::Format::DateParse';
+requires 'Config::Pit';
+requires 'Clone';
+requires 'YAML';
 
 tests_recursive;
 recursive_author_tests 'xt';
