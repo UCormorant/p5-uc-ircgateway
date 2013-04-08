@@ -107,28 +107,43 @@ my %api_method = (
         |
         ^(?:
             direct_messages
-            | friendship
-            | favorites
-            | lists
-            | lists/members
-            | lists/subscribers
-            | saved_searchs
-            | blocks
+          | friendships
+          | favorites
+          | lists
+          | lists/members
+          | lists/subscribers
+          | saved_searchs
+          | blocks
          )
-            /(?:new|update|create|destroy)
+            /(?:new|update|create(?:_all)?|destroy(?:_all)?)
         |
         ^account
-            /(?:update|settings|end_session)
+            /(?:
+                update(?:
+                    _delivery_device
+                  | _profile(?:
+                        _background_image
+                      | _colors
+                      | _image
+                    )?
+                )?
+              | settings
+              | remove_profile_banner
+              | update_profile_banner
+             )
         |
         ^notifications
             /(?:follow|leave)
         |
         ^geo/place
         |
-        ^report_spam
+        ^users/report_spam
         |
         ^oauth
             /(?:access_token|request_token)
+        |
+        ^oauth2
+            /(?:token|invaildate_token)
     }x,
 );
 
@@ -418,7 +433,7 @@ override '_event_ctcp_action' => sub {
             break unless check_params($self, $handle, $msg);
 
             for my $tid (@params) {
-                $self->tid_event($handle, 'statuses/retweet', $tid, target => $target, cb => sub {
+                $self->tid_event($handle, 'statuses/retweet/:id', $tid, target => $target, cb => sub {
                     my ($header, $res, $reason) = @_;
                     $self->logger->remark( $handle, { tid => $tid, retweeted => 1 } ) if $res;
                 });
@@ -462,7 +477,7 @@ override '_event_ctcp_action' => sub {
 
             break if not scalar @tids;
             for my $tid (@tids) {
-                $self->tid_event($handle, 'statuses/destroy', $tid, target => $target);
+                $self->tid_event($handle, 'statuses/destroy/:id', $tid, target => $target);
             }
         }
         when (/$action_command{list}/) {
@@ -679,7 +694,7 @@ sub get_mentions {
 
     $params{max_id}   = delete $opt{max_id}   if exists $opt{max_id};
     $params{since_id} = delete $opt{since_id} if exists $opt{since_id};
-    $self->api($handle, 'statuses/mentions', params => \%params, cb => sub {
+    $self->api($handle, 'statuses/mentions_timeline', params => \%params, cb => sub {
         my ($header, $res, $reason) = @_;
         if ($res) {
             my $mentions = $res;
@@ -723,14 +738,16 @@ sub tid_event {
                 : exists $opt{callback} ? delete $opt{callback} : undef;
         $sub->(@_) if defined $sub;
     };
+    my $params = delete $opt{params} || {};
 
     if (!$tweet) {
         $text = "$event error: no such tid";
         $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
     }
     else {
-        $api .= "/$tweet_id";
-        $self->api($handle, $api, cb => $cb);
+        if ($api =~ /:id$/) { $api =~ s/:id/$tweet_id/; }
+        else { $params->{id} = $tweet_id; }
+        $self->api($handle, $api, params => $params, cb => $cb);
     }
 }
 
@@ -1035,7 +1052,7 @@ sub join_channels {
     return () unless $self && $handle;
     $retry ||= 5 + 1;
 
-    $self->api($handle, 'lists/all', cb => sub {
+    $self->api($handle, 'lists/list', cb => sub {
         my ($header, $res, $reason) = @_;
 
         if (!$res && --$retry) {
@@ -1230,7 +1247,6 @@ sub streamer {
     my $handle = delete $config{handle};
     return $handle->{streamer} if exists $handle->{streamer};
 
-    my $tmap = $handle->{tmap};
     $handle->{streamer} = AnyEvent::Twitter::Stream->new(
         method  => 'userstream',
         timeout => 45,

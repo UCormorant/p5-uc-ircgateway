@@ -1,4 +1,6 @@
-Version 2.1.0
+Version 2.1.1
+
+Twitter API 1.1 対応
 
 Uc::IrcGateway 作りこみ計画
     ゲートウェイサーバ基底クラスとしての完成度上げたい
