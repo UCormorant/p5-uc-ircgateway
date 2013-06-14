@@ -2,37 +2,32 @@
 
 package EchoServer;
 
-use 5.010;
+use 5.014;
 use common::sense;
 use warnings qw(utf8);
 
 use lib qw(../lib);
-use Uc::IrcGateway;
-use Any::Moose;
+use parent 'Uc::IrcGateway';
 
-extends 'Uc::IrcGateway';
-override '_event_irc_privmsg' => sub {
-    my ($self, $handle, $msg) = super();
-    return unless $self;
-
-    my ($msgtarget, $text) = @{$msg->{params}};
-
-    for my $target (@{$msg->{success}}) {
-        # send privmsg message to yourself
-        $self->send_cmd( $handle, $handle->self, 'PRIVMSG', $target, $text );
-    }
-
-    @_;
-};
-
-__PACKAGE__->meta->make_immutable;
-no Any::Moose;
-
+#extends 'Uc::IrcGateway';
+#override '_event_irc_privmsg' => sub {
+#    my ($self, $handle, $msg) = super();
+#    return unless $self;
+#
+#    my ($msgtarget, $text) = @{$msg->{params}};
+#
+#    for my $target (@{$msg->{success}}) {
+#        # send privmsg message to yourself
+#        $self->send_cmd( $handle, $handle->self, 'PRIVMSG', $target, $text );
+#    }
+#
+#    @_;
+#};
 
 
 package main;
 
-use 5.010;
+use 5.014;
 use common::sense;
 use warnings qw(utf8);
 
@@ -54,7 +49,6 @@ warn <<"_HELP_" and exit if $help;
 Usage: $0 --host=127.0.0.1 --port=6667 --debug
 _HELP_
 
-my $cv = AnyEvent->condvar;
 my $ircd = EchoServer->new(
     host => $host,
     port => $port,
@@ -63,6 +57,6 @@ my $ircd = EchoServer->new(
 );
 
 $ircd->run();
-$cv->recv();
+AE::cv->recv();
 
 1;

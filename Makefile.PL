@@ -34,6 +34,8 @@ reference_module 'lib/Uc/IrcGateway.pm';
 auto_set_repository;
 
 test_requires 'Test::More' => '0.94'; # for subtest
+test_requires 'Test::TCP';
+test_requires 'Test::Difflet';
 
 requires 'Mouse' => '1.04';
 requires 'Any::Moose' => '0.11'; # for ::Util::TypeConstraints

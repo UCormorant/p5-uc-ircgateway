@@ -1,35 +1,49 @@
-package Uc::IrcGateway v2.1.2;
+package Uc::IrcGateway v3.0.0;
 
 use 5.014;
 use warnings;
 use utf8;
 
-use Uc::IrcGateway::Channel;
+use parent qw(Object::Event);
+
 use Uc::IrcGateway::Connection;
-use Uc::IrcGateway::Logger;
-use Uc::IrcGateway::Structure;
-use Uc::IrcGateway::TypableMap;
 use Uc::IrcGateway::User;
 
-use Any::Moose;
-use Any::Moose qw(::Util::TypeConstraints);
-use AnyEvent::Socket;
+use AnyEvent::Socket qw(tcp_server);
 use AnyEvent::IRC::Util qw(
     mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
     prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
 );
-use Carp qw(carp croak);
+use DBD::SQLite 1.027;
+use Carp qw(croak);
 use Encode qw(find_encoding);
 use Path::Class qw(file);
 use Sys::Hostname qw(hostname);
 use Scalar::Util qw(refaddr);
-use IO::Socket::INET;
-use UNIVERSAL::which;
-use Data::Dumper qw(Dumper);
+use IO::Socket::INET ();
+use UNIVERSAL::which ();
+use YAML::XS ();
+use JSON::XS ();
+
+use Class::Accessor::Lite (
+    rw => [ qw(
+        host
+        port
+        time_zone
+        servername
+        gatewayname
+        daemon
+        motd
+        ping_timeout
+        debug
+    )],
+    ro => [ qw(
+        handles
+        ctime
+    )],
+);
 
 BEGIN {
-    $Data::Dumper::Terse = 1;
-
     no strict 'refs';
     while (my ($code, $name) = each %AnyEvent::IRC::Util::RFC_NUMCODE_MAP) {
         *{$name} = sub () { $code };
@@ -43,6 +57,7 @@ our $CRLF     = "\015\012";
 our $SPECIAL  = '\[\]\\\`\_\^\{\|\}';
 our $SPCRLFCL = " $CRLF:";
 our %REGEX = (
+    crlf     => qr{\015*\012},
     chomp    => qr{[$CRLF$NUL]+$},
     channel  => qr{^(?:[#+&]|![A-Z0-9]{5})[^$SPCRLFCL,$BELL]+(?:\:[^$SPCRLFCL,$BELL]+)?$},
     nickname => qr{^[\w][-\w$SPECIAL]*$}, # 文字数制限,先頭の数字禁止は扱いづらいのでしません
@@ -102,79 +117,49 @@ our @EXPORT = qw(
 );
 push @EXPORT, values %AnyEvent::IRC::Util::RFC_NUMCODE_MAP;
 
-extends qw/Object::Event Exporter/;
-subtype 'NoBlankedStr'  => as 'Str'   => where { /^\S+$/ } => message { "This Str ($_) must not have any blanks!" };
-coerce  'NoBlankedStr'  => from 'Str' => via { s/\s+//g; $_ };
-subtype 'ValidNickName' => as 'Str' => where { /$REGEX{nickname}/ } => message { "This Str ($_) is not a valid nickname!" };
-subtype 'ValidChanName' => as 'Str' => where { /$REGEX{channel}/  } => message { "This Str ($_) is not a valid channel name!" };
 
-# handle (refaddr($handle) => $handle)
-has 'handles' => ( is => 'ro', isa => 'HashRef[Uc::IrcGateway::Connection]', required => 1, default => sub { {} } );
-# server host
-has 'host' => ( is => 'ro', isa => 'Str', required => 1, default => '127.0.0.1' );
-# listen port
-has 'port' => ( is => 'ro', isa => 'Int', required => 1, default => 6667 );
-# login password
-has 'password' => ( is => 'ro', isa => 'NoBlankedStr');
-# operator password
-has 'operator_password' => ( is => 'ro', isa => 'NoBlankedStr');
-# server hostname for message
-has 'servername' => ( is => 'rw', isa => 'Str', required => 1, default => sub { scalar hostname() } );
-# server created ctime
-has 'ctime' => ( is => 'ro', isa => 'Str', lazy => 1, builder => sub { scalar localtime } );
-# message of the day file path
-has 'motd' => ( is => 'ro', isa => 'Path::Class::File', default => sub { (my $file = $0) =~ s/\.\w+$//; file("$file.motd.txt") } );
-# server time zone
-has 'time_zone' => ( is => 'rw', isa => 'Str', required => 1, default => 'local' );
-# server character set
-has 'charset' => ( is => 'rw', isa => 'Str', required => 1, default => 'UTF-8' );
-# server character code encoder/decoder
-has 'codec' => ( is => 'ro', isa => 'Object', lazy => 1, builder => sub { find_encoding($_[0]->charset) } );
-# server character set
-has 'err_charset' => ( is => 'rw', isa => 'Str', required => 1, default => sub { $^O eq 'MSWin32' ? 'cp932' : 'utf8' } );
-# server character code encoder/decoder
-has 'err_codec' => ( is => 'ro', isa => 'Object', lazy => 1, builder => sub { find_encoding($_[0]->err_charset) } );
-# welcome message when USER command succeed
-has 'welcome' => ( is => 'rw', isa => 'Str', default => 'welcome to my irc server' );
-# gateway daemon name
-has 'gatewayname' => ( is => 'rw', isa => 'ValidNickName', required => 1, default => 'ucircgateway' );
-# gateway daemon realname
-has 'admin' => ( is => 'rw', isa => 'Str', default => 'nobody' );
-# server daemon
-has 'daemon' => ( is => 'ro', isa => 'Uc::IrcGateway::User', lazy => 1, builder => sub {
-    my $self = shift;
-    my $gatewayname = $self->gatewayname;
-    Uc::IrcGateway::User->new(
-        registered => 1,
-        nick => $gatewayname, login => $gatewayname, realname => $self->admin,
-        host => $self->host, addr => $self->servername, server => $self->servername,
-    );
-});
-# log level
-# debug flag
-has [qw/log_level debug/] => ( is => 'rw', isa => 'Int', default => 0 );
-# logger
-has 'logger' => ( is => 'rw', isa => 'Uc::IrcGateway::Logger', lazy => 1, builder => sub {
-    my $self = shift;
-    Uc::IrcGateway::Logger->new( gateway => $self, log_level => $self->log_level, log_debug => $self->debug );
-});
+sub new {
+    my $class = shift;
+    my %args = @_ == 1 ? %{$_[0]} : @_;
 
-__PACKAGE__->meta->make_immutable;
-no Any::Moose;
-no Any::Moose qw(::Util::TypeConstraints);
+    my $self = bless +{
+        debug => 0,
+
+        host => '127.0.0.1',
+        port => 6667,
+        time_zone => 'local',
+        servername => scalar hostname(),
+        gatewayname => '*ucircgd',
+        motd => file($0 =~ s/(.*)\.\w+$/$1.motd.txt/r),
+        ping_timeout => 30,
+
+        charset     => 'utf8',
+        err_charset => ($^O eq 'MSWin32' ? 'cp932' : 'utf8'),
+
+        handles => {},
+
+        %args,
+    }, $class;
+
+    $self->daemon(Uc::IrcGateway::User->new(nick => $self->gatewayname));
+    $self->{codec}     = find_encoding($self->charset);
+    $self->{err_codec} = find_encoding($self->err_charset);
+
+    $self;
+}
 
 sub run {
     my $self = shift;
 
     say "Starting irc gateway server on @{[ $self->host.':'.$self->port ]}";
 
-    print "Checking the port is able to use... ";
+    print "Check port... ";
     IO::Socket::INET->new(
         Proto => "tcp",
         PeerAddr => $self->host,
         PeerPort => $self->port,
         Timeout => "1",
-    ) and croak "stop. @{[ $self->host.':'.$self->port ]} is already used.";
+    ) and croak "stop. @{[ $self->host.':'.$self->port ]} is already used by other process";
 
     # TODO: ポートを開けないアドレスのチェック
     my $check = IO::Socket::INET->new(
@@ -183,7 +168,7 @@ sub run {
         LocalPort => $self->port,
         Listen => 1,
     ) or croak "stop. $!";
-    $check->listen or croak "stop. cannot listen @{[ $self->host.':'.$self->port ]}.";
+    $check->listen or croak "stop. cannot listen on @{[ $self->host.':'.$self->port ]}";
     $check->close;
     say "done.";
 
@@ -201,15 +186,19 @@ sub run {
                 delete $self->handles->{refaddr($handle)};
             },
         );
-        $handle->on_read(sub { $_[0]->push_read(line => sub {
-            my ($handle, $line, $eol) = @_;
-            $line =~ s/$REGEX{chomp}//g;
-            $self->handle_irc_msg($handle, $self->codec->decode($line));
-        }) });
+        $handle->on_read(sub {
+            # \015* for some broken servers, which might have an extra
+            # carriage return in their MOTD.
+            $_[0]->push_read(line => $REGEX{crlf}, sub {
+                my ($handle, $line, $eol) = @_;
+                $line =~ s/$REGEX{chomp}//g;
+                $self->handle_irc_msg($handle, $self->codec->decode($line));
+            });
+        });
         $self->handles->{refaddr($handle)} = $handle;
     }, sub {
         my ($fh, $host, $port) = @_;
-        $self->ctime;
+        $self->{ctime} = scalar localtime;
 
         say "Bound to $host:$port";
 
@@ -248,6 +237,7 @@ sub run {
         say "   - Server created at @{[ $self->ctime ]}";
         say "   - Server time zone is @{[ $self->time_zone ]}";
         say "   - Gateway bot is @{[ $self->gatewayname ]}";
+#        say "   - Setting files are in @{[ $self->set_dir ]}";
         say "   - Message Of The Day uses @{[ scalar $self->motd ]}";
     };
 }
@@ -259,628 +249,16 @@ sub _event_irc {
     my ($self, $handle, $msg) = @_;
     my $cmd = $msg->{command};
 
-    # <command> is not implemented
-    $self->send_msg( $handle, ERR_UNKNOWNCOMMAND, $cmd, "is not implemented" );
-
-    @_;
-}
-
-sub _event_irc_nick {
-    my ($self, $handle, $msg) = @_;
-    return () unless $self && $handle;
-
-    my $cmd  = $msg->{command};
-    my $nick = $msg->{params}[0];
-    my $user = $handle->self;
-
-    if ($nick eq '') {
-        $self->send_msg( $handle, ERR_NONICKNAMEGIVEN, 'No nickname given' );
-        return ();
-    }
-    elsif (not $nick =~ /$REGEX{nickname}/) {
-        $self->send_msg( $handle, ERR_ERRONEUSNICKNAME, $nick, 'Erroneous nickname' );
-        return ();
-    }
-    elsif ($handle->has_nick($nick) && defined $user && $handle->lookup($nick) ne $user->login) {
-        $self->send_msg( $handle, ERR_NICKNAMEINUSE, $nick, 'Nickname is already in use' );
-        return ();
-    }
-
-    if (defined $user && $user->nick) {
-        # change nick
-        $self->send_cmd( $handle, $user, $cmd, $nick );
-        $handle->del_lookup($user->nick);
-        $user->nick($nick);
-        $handle->set_users($user);
-    }
-    elsif (defined $user) {
-        # finish register user
-        $user->nick($nick);
-        $user->registered(1);
-        $msg->{registered} = 1;
-        $handle->schema;
-        $handle->set_users($user);
-        $self->welcome_message( $handle );
+    if (not $handle->registered) {
+        # You have not registered
+        $self->send_msg( $handle, ERR_NOTREGISTERED, "You have not registered" );
     }
     else {
-        # start register user
-        $user = Uc::IrcGateway::User->new(
-            nick => $nick, login => '*', realname => '*',
-            host => '*', addr => '*', server => '*',
-        );
-        $handle->self($user);
+        # <command> is not implemented
+        $self->send_msg( $handle, ERR_UNKNOWNCOMMAND, $cmd, "is not implemented" );
     }
 
     @_;
-}
-
-sub _event_irc_user {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my ($login, $host, $server, $realname) = @{$msg->{params}};
-    my $cmd  = $msg->{command};
-    my $user = $handle->self;
-    if (defined $user && $user->registered) {
-        $self->send_msg( $handle, ERR_ALREADYREGISTRED, 'Unauthorized command (already registered)' );
-        return ();
-    }
-
-    $host ||= '0'; $server ||= '*'; $realname ||= '';
-    if (defined $user) {
-        $user->login($login);
-        $user->realname($realname);
-        $user->host($host);
-        $user->addr($self->host);
-        $user->server($server);
-        $user->registered(1);
-        $msg->{registered} = 1;
-        $handle->schema;
-        $handle->set_users($user);
-        $self->welcome_message( $handle );
-    }
-    else {
-        $user = Uc::IrcGateway::User->new(
-            nick => '', login => $login, realname => $realname,
-            host => $host, addr => $self->host, server => $server,
-        );
-        $handle->self($user);
-    }
-
-    @_;
-}
-
-sub _event_irc_motd {
-    my ($self, $handle, $msg) = @_;
-    my $missing = 1;
-    if (-e $self->motd) {
-        my $fh = $self->motd->open("<:encoding(@{[$self->charset]})");
-        if (defined $fh) {
-            $missing = 0;
-            $self->send_msg( $handle, RPL_MOTDSTART, "- @{[$self->servername]} Message of the day - " );
-            my $i = 0;
-            while (my $line = $fh->getline) {
-                chomp $line;
-                $self->send_msg( $handle, RPL_MOTD, "- $line" );
-            }
-            $self->send_msg( $handle, RPL_ENDOFMOTD, 'End of /MOTD command' );
-        }
-    }
-    if ($missing) {
-        $self->send_msg( $handle, ERR_NOMOTD, 'MOTD File is missing' );
-    }
-
-    @_;
-}
-
-sub _event_irc_join {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my $chans = $msg->{params}[0];
-    my $nick  = $handle->self->nick;
-    my $login = $handle->self->login;
-
-    for my $chan (split /,/, $chans) {
-        next unless $self->check_channel( $handle, $chan );
-        next if     $self->check_channel( $handle, $chan, joined => 1, silent => 1 );
-
-        $handle->set_channels($chan => Uc::IrcGateway::Channel->new(name => $chan) ) if not $handle->has_channel($chan);
-        $handle->get_channels($chan)->join_users($login => $nick);
-        $handle->get_channels($chan)->give_operator($login => $nick);
-
-        # send join message
-        $self->send_cmd( $handle, $handle->self, 'JOIN', $chan );
-
-        # sever reply
-        $self->send_msg( $handle, RPL_TOPIC, $chan, $handle->get_channels($chan)->topic // '' );
-        $self->handle_irc_msg( $handle, "NAMES $chan" );
-
-        push @{$msg->{success}}, $chan;
-    }
-
-    @_;
-}
-
-sub _event_irc_part {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my ($chans, $text) = @{$msg->{params}};
-    my $login = $handle->self->login;
-
-    for my $chan (split /,/, $chans) {
-        next unless $self->check_channel( $handle, $chan, joined => 1 );
-
-        $handle->get_channels($chan)->part_users($login);
-
-        # send part message
-        $self->send_cmd( $handle, $handle->self, 'PART', $chan, $text );
-
-        delete $handle->channels->{$chan} if !$handle->get_channels($chan)->user_count;
-        push @{$msg->{success}}, $chan;
-    }
-
-    @_;
-}
-
-sub _event_irc_mode {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my $cmd = $msg->{command};
-    my ($target, @mode_list) = @{$msg->{params}};
-    my $mode_params = join '', @mode_list;
-    my $user = $handle->self;
-
-    if (is_valid_channel_name($target)) {
-        return () unless $self->check_channel($handle, $target);
-
-        my $chan = $handle->get_channels($target);
-        # <channel>  *( ( "-" / "+" ) *<modes> *<modeparams> )
-
-        my $oper = '';
-        my $mode_string  = '';
-        my $param_string = '';
-        while (my $mode = shift @mode_list) {
-            for my $m (split //, $mode) {
-                if ($m eq '+' or $m eq '-') {
-                    $oper = $m; next;
-                }
-                given ($m) {
-    #     O - "チャンネルクリエータ"の権限を付与
-    #     o - チャンネルオペレータの特権を付与/剥奪
-                    when ('o') {
-                        $oper ||= '+';
-
-                        my $target_nick  = shift @mode_list;
-                        my $target_login = $handle->lookup($target);
-
-                        if (not $chan->has_user($target_login)) {
-                            $self->send_msg( $handle, ERR_USERNOTINCHANNEL, $target, $chan->name, "They aren't on that channel" );
-                        }
-                        elsif ($chan->is_operator($user->login)) {
-                            if ($chan->is_operator($target_login) and $oper eq '-') {
-                                $chan->deprive_operator($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
-                            elsif (!$chan->is_operator($target_login)) {
-                                $chan->give_operator($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
-                        }
-                    }
-    #     v - ボイス特権を付与/剥奪
-                    when ('v') {
-                        $oper ||= '+';
-
-                        my $target_nick  = shift @mode_list;
-                        my $target_login = $handle->lookup($target);
-
-                        if (not $chan->has_user($target_login)) {
-                            $self->send_msg( $handle, ERR_USERNOTINCHANNEL, $target, $chan->name, "They aren't on that channel" );
-                        }
-                        elsif ($chan->is_speaker($user->login)) {
-                            if ($chan->is_speaker($target_login) and $oper eq '-') {
-                                $chan->deprive_voice($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
-                            elsif (!$chan->is_speaker($target_login)) {
-                                $chan->give_voice($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
-                        }
-                    }
-    #     a - 匿名チャンネルフラグをトグル
-    #     i - 招待のみチャンネルフラグをトグル
-    #     m - モデレートチャンネルをトグル
-    #     n - チャンネル外クライアントからのメッセージ遮断をトグル
-    #     q - クワイエットチャンネルフラグをトグル
-    #     p - プライベートチャンネルフラグをトグル
-    #     s - シークレットチャンネルフラグをトグル
-    #     r - サーバreopチャンネルフラグをトグル
-    #     t - トピック変更をチャンネルオペレータのみに限定するかをトグル
-                    when ([qw/a i m n q p s r t/]) {
-                        $oper ||= '+';
-                        $chan->mode->{$m} = $oper eq '-' ? 0 : 1;
-                        $mode_string  ||= $oper; $mode_string .= $m;
-                    }
-    #
-    #     k - チャンネルキー(パスワード)の設定／解除
-    #     l - チャンネルのユーザ数制限の設定／解除
-    #
-    #     b - ユーザをシャットアウトする禁止(ban)マスクの設定／解除
-    #     e - 禁止マスクに優先する例外マスクの設定／解除
-    #     I - 自動的に招待のみフラグに優先する招待マスクの設定／解除
-                    default {
-                        $self->send_msg( $handle, ERR_UNKNOWNCOMMAND, $m, "is unknown mode char to me for @{[$chan->name]}" );
-                    }
-                }
-            }
-        }
-
-        $self->send_msg( $handle, RPL_CHANNELMODEIS, $chan->name, $mode_string, grep defined, ($param_string || undef) ) if $mode_string;
-        push @{$msg->{success}}, $mode_string, $param_string if $mode_string;
-    }
-    else {
-        return () unless $self->check_user($handle, $target);
-
-        if ($target ne $user->nick) {
-            $self->send_msg( $handle, ERR_USERSDONTMATCH, 'Cannot change mode for other users' );
-            return ();
-        }
-
-        # <nickname> *( ( "+" / "-" ) *( "i" / "w" / "o" / "O" / "r" ) )
-
-        if ($mode_params eq '') {
-            $self->send_msg( $handle, RPL_UMODEIS, $user->mode_string );
-        }
-        else {
-            my $mode = $user->mode;
-            my $mode_flag = (join '', keys %{$mode}) || $NUL;
-            my $mode_string = '';
-            my $oper = '+';
-            my $oper_last = '';
-            for my $char (split //, $mode_params) {
-                if ($char =~ /[+-]/) {
-                    $oper = $char;
-                }
-                elsif ($char !~ /[$mode_flag]/) {
-                    $self->send_msg( $handle, ERR_UMODEUNKNOWNFLAG, 'Unknown MODE flag' );
-                }
-                else {
-                    $mode->{$char} = $oper eq '-' ? 0 : 1;
-                    $mode_string .= $oper ne $oper_last ? $oper.$char : $char;
-                    $oper_last = $oper;
-                }
-            }
-
-            $self->send_cmd( $handle, $user, 'MODE', $user->nick, $mode_string ) if $mode_string;
-            push @{$msg->{success}}, $mode_string;
-        }
-    }
-
-    @_;
-}
-
-sub _event_irc_topic {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my ($chan, $topic) = @{$msg->{params}};
-    return () unless $self->check_channel( $handle, $chan, enable => 1 );
-
-    if ($topic) {
-        $handle->get_channels($chan)->topic( $topic );
-
-        # send topic message
-        my $prefix = $msg->{prefix} || $handle->self;
-        $self->send_cmd( $handle, $prefix, 'TOPIC', $chan, $topic );
-    }
-    elsif (defined $topic) {
-        $self->send_msg( $handle, RPL_NOTOPIC, $chan, 'No topic is set' );
-    }
-    else {
-        $self->send_msg( $handle, RPL_TOPIC, $chan, $handle->get_channels($chan)->topic );
-    }
-
-    @_;
-}
-
-sub _event_irc_privmsg {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my $cmd    = $msg->{command};
-    my $prefix = $msg->{prefix} || $handle->self->to_prefix;
-    my ($msgtarget, $text) = @{$msg->{params}};
-    my ($plain_text, $ctcp) = decode_ctcp($text);
-    my $silent = $cmd eq 'NOTICE' ? 1 : 0;
-
-    if (not defined $text) {
-        $self->send_msg( $handle, ERR_NOTEXTTOSEND, 'No text to send' ) unless $silent;
-        return ();
-    }
-
-    for my $target (split /,/, $msgtarget) {
-        # TODO: error
-        if (0) { # WILD CARD
-            if (0) { # check wild card
-                # ERR_NOTOPLEVEL <mask> :No toplevel domain specified
-                # ERR_WILDTOPLEVEL <mask> <mask> :Wildcard in toplevel domain
-                # ERR_TOOMANYTARGETS <target> :<error code> recipients. <abort message>
-                # ERR_NORECIPIENT :No recipient given (<command>)
-                next;
-            }
-        }
-        elsif (is_valid_channel_name($target)) {
-            if (0) { # check mode
-                # ERR_CANNOTSENDTOCHAN <channel name> :Cannot send to channel
-                next;
-            }
-        }
-        elsif (not $self->check_user($handle, $target, silent => $silent)) {
-            next;
-        }
-        else {
-            my $user = $handle->get_users_by_nicks($target);
-            $self->send_msg( $handle, RPL_AWAY, $target, $user->away_message ) if ref $user and $user->mode->{a};
-        }
-
-        # ctcp event
-        if (scalar @$ctcp) {
-            for my $event (@$ctcp) {
-                my ($ctcp_text, $ctcp_args) = @{$event};
-                $ctcp_text .= " $ctcp_args" if $ctcp_args;
-                $self->handle_ctcp_msg( $handle, $ctcp_text,
-                        prefix => $prefix, target => $target, orig_command => $cmd, silent => $silent );
-            }
-        }
-
-        # push target for override method
-        push @{$msg->{success}}, $target;
-    }
-
-    # push plain text and ctcp
-    push @{$msg->{params}}, $plain_text, $ctcp;
-
-    @_;
-}
-
-*_event_irc_notice = \&_event_irc_privmsg;
-
-sub _event_irc_ping { @_; }
-sub _event_irc_pong { @_; }
-
-sub _event_irc_names {
-    my ($self, $handle, $msg) = @_;
-    my $chans = $msg->{params}[0] || join ',', sort $handle->channel_list;
-    my $server = $msg->{params}[1];
-
-    if ($server) {
-        # サーバマスク指定は対応予定なし
-        $self->send_msg( $handle, ERR_NOSUCHSERVER, $server, 'No such server' );
-        return ();
-    }
-
-    for my $chan (split /,/, $chans) {
-        next unless $self->check_channel( $handle, $chan, enable => 1 );
-
-        my $c = $handle->get_channels($chan);
-        my $c_mode = $c->mode->{s} ? '@' : $c->mode->{p} ? '*' : '=';
-        my $m_chan = $c_mode.' '.$chan;
-
-        my $users = '';
-        my @users_list = ();
-        my $users_test = mk_msg($self->to_prefix, RPL_NAMREPLY, $handle->self->nick, $m_chan, '');
-        for my $nick (sort $c->nick_list) {
-            next unless $handle->has_nick($nick);
-            my $u_login = $handle->lookup($nick);
-            my $u_mode = $c->is_operator($u_login) ? '@' : $c->is_speaker($u_login) ? '+' : '';
-            my $m_nick = $u_mode.$nick;
-            if (length "$users_test$users$m_nick$CRLF" > $MAXBYTE) {
-                chop $users;
-                push @users_list, $users;
-                $users = '';
-            }
-            $users .= "$m_nick ";
-        }
-        push @users_list, $users if chop $users;
-
-        $self->send_msg( $handle, RPL_NAMREPLY, $m_chan, $_ ) for @users_list;
-        $self->send_msg( $handle, RPL_ENDOFNAMES, $chan, 'End of /NAMES list' );
-    }
-
-    @_;
-}
-
-sub _event_irc_list {
-    my ($self, $handle, $msg) = @_;
-    my $chans = $msg->{params}[0] || join ',', sort $handle->channel_list;
-    my $server = $msg->{params}[1];
-    my $nick = $handle->self->nick;
-
-    if ($server) {
-        # サーバマスク指定は対応予定なし
-        $self->send_msg( $handle, ERR_NOSUCHSERVER, $server, 'No such server' );
-        return ();
-    }
-
-    # too old message spec
-    #$self->send_msg( $handle, RPL_LISTSTART, $nick, 'Channel', 'Users Name' );
-    for my $channel ($handle->get_channels(split /,/, $chans)) {
-        next unless $channel;
-        my $member_count = scalar $channel->login_list;
-        $self->send_msg( $handle, RPL_LIST, $channel->name, $member_count, $channel->topic );
-    }
-    $self->send_msg( $handle, RPL_LISTEND, 'END of /List' );
-
-    @_;
-}
-
-sub _event_irc_invite {
-    my ($self, $handle, $msg) = check_params(@_);
-    my $cmd    = $msg->{command};
-    my ($target, $channel) = @{$msg->{params}};
-
-    return () unless $self->check_user($handle, $target);
-
-    my $t_user = $handle->get_users_by_nicks($target);
-
-    if ($self->check_channel($handle, $channel, enable => 1, silent => 1)) {
-        my $chan = $handle->get_channels($channel);
-        if (not $chan->has_user($handle->self->login)) {
-            $self->send_msg( $handle, ERR_NOTONCHANNEL, $channel, "You're not on that channel" );
-            return ();
-        }
-        if ($chan->has_user($t_user->login)) {
-            $self->send_msg( $handle, ERR_USERONCHANNEL, $target, $channel, 'is already on channel' );
-            return ();
-        }
-        if (not $chan->is_operator($handle->self->login)) {
-            $self->send_msg( $handle, ERR_CHANOPRIVSNEEDED, $channel, "You're not channel operator" );
-            return ();
-        }
-    }
-
-    if ($t_user->mode->{a}) {
-        $self->send_msg( $handle, RPL_AWAY, $target, $t_user->away_message );
-    }
-
-    # send invite message
-    $self->send_cmd( $handle, $handle->self, 'INVITE', $target, $channel );
-
-    # send server reply
-    $self->send_cmd( $handle, $handle->self, RPL_INVITING, $channel, $target );
-
-    @_;
-}
-
-sub _event_irc_kick {}
-
-sub _event_irc_who {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my ($mask, $oper) = @{$msg->{params}};
-    my @channels;
-
-    # TODO: いまのところ channel, nick の完全一致チェックしにか対応してません
-    if (!$mask || $mask eq '0') {
-        @channels = grep {
-            not $self->check_channel($handle, $_, joined => 1, silent => 1);
-        } $handle->channel_list;
-        @channels = $handle->get_channels(@channels);
-    }
-    elsif ($handle->has_channel($mask)) {
-        @channels = $handle->get_channels($mask);
-    }
-    else {
-        @channels = ();
-    }
-
-    if (scalar @channels) {
-        for my $channel (@channels) {
-            my $c_name = $channel->mode->{p} ? '*' : $channel->name;
-            for my $u ($handle->get_users($channel->login_list)) {
-                my $mode = $u->mode->{a} ? 'G' : 'H';
-                $mode .= "*" if $u->mode->{o}; # server operator
-                $mode .= $channel->is_operator($u->login) ? '@' : $channel->is_speaker($u->login) ? '+' : '';
-                $self->send_msg( $handle, RPL_WHOREPLY, $c_name, $u->login, $u->host, $u->server, $u->nick, $mode, '0 '.$u->realname);
-            }
-            $self->send_msg( $handle, RPL_ENDOFWHO, $channel->name, 'END of /WHO List');
-        }
-    }
-    else {
-        my $u = $handle->get_users($mask);
-        if ($u) {
-            my $mode = $u->mode->{a} ? 'G' : 'H';
-            $mode .= "*" if $u->mode->{o}; # server operator
-            $self->send_msg( $handle, RPL_WHOREPLY, '*', $u->login, $u->host, $u->server, $u->nick, $mode, '0 '.$u->realname);
-        }
-        $self->send_msg( $handle, RPL_ENDOFWHO, '*', 'END of /WHO List');
-    }
-
-    @_;
-}
-
-sub _event_irc_whois {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my @nick_list = map { $self->check_user($handle, $_) ? $_ : () } split /,/, $msg->{params}[0];
-
-    # TODO: mask (ワイルドカード)
-    for my $user ($handle->get_users_by_nicks(@nick_list)) {
-        next unless $user;
-
-        my $channels = '';
-        my @channel_list = ();
-        my $channels_test = mk_msg($self->to_prefix, RPL_WHOISCHANNELS, $user->nick, '');
-        for my $chan ($handle->who_is_channels($user->login)) {
-            if (length "$channels_test$channels$chan$CRLF" > $MAXBYTE) {
-                chop $channels;
-                push @channel_list, $channels;
-                $channels = '';
-            }
-            $channels .= "$chan ";
-        }
-        push @channel_list, $channels if chop $channels;
-
-        $self->send_msg( $handle, RPL_AWAY, $user->nick, $user->away_message ) if $user->mode->{a};
-        $self->send_msg( $handle, RPL_WHOISUSER, $user->nick, $user->login, $user->host, '*', $user->realname );
-        $self->send_msg( $handle, RPL_WHOISSERVER, $user->nick, $user->server, $user->server );
-        $self->send_msg( $handle, RPL_WHOISOPERATOR, $user->nick, 'is an IRC operator' ) if $user->mode->{o};
-        $self->send_msg( $handle, RPL_WHOISIDLE, $user->nick, time - $user->last_modified, 'seconds idle' );
-        $self->send_msg( $handle, RPL_WHOISCHANNELS, $user->nick, $_ ) for @channel_list;
-        $self->send_msg( $handle, RPL_ENDOFWHOIS, $user->nick, 'End of /WHOIS list' );
-    }
-
-    @_;
-}
-
-sub _event_irc_away {
-    my ($self, $handle, $msg) = @_;
-    return () unless $self && $handle;
-
-    my $cmd  = $msg->{command};
-    my $text = $msg->{params}[0];
-
-    $handle->self->mode->{a} = $text eq '' ? 0 : 1;
-    $self->send_cmd( $handle, $self->to_prefix, RPL_UNAWAY,  'You are no longer marked as being away' ) if not $handle->self->mode->{a};
-    $self->send_cmd( $handle, $self->to_prefix, RPL_NOWAWAY, 'You have been marked as being away' )     if     $handle->self->mode->{a};
-
-    @_;
-}
-
-sub _event_irc_ison {
-    my ($self, $handle, $msg) = check_params(@_);
-    return () unless $self && $handle;
-
-    my @users;
-    for my $nick (@{$msg->{params}}) {
-        push @users, $nick if $handle->has_user($nick);
-    }
-
-    $self->send_msg( $handle, RPL_ISON, join ' ', @users );
-
-    @_;
-}
-
-sub _event_irc_quit {
-    my ($self, $handle, $msg) = @_;
-    my $prefix = $msg->{prefix} || $handle->self->to_prefix;
-    my $quit_msg = $msg->{params}[0];
-    my ($nick, $login, $host) = split_prefix($prefix);
-
-    # send error to accept quit # 本人には返さなくていい
-    # $self->send_cmd( $handle, $prefix, 'ERROR', qq|Closing Link: $nick\[$login\@$host\] ("$quit_msg")| );
-
-    $handle->push_shutdown; # close connection
 }
 
 
@@ -889,80 +267,50 @@ sub _event_irc_quit {
 sub _event_ctcp {
     my ($self, $handle, $msg, $reply) = @_;
 
-    # <query> is unknown
-    $self->send_ctcp_reply( $handle, $self->daemon, 'ERROR', $msg->{raw}, ':Query is unknown' );
-
-    @_;
-}
-
-sub _event_ctcp_finger {}
-sub _event_ctcp_userinfo {
-    my ($self, $handle, $msg) = @_;
-    my ($cmd, $orig_cmd) = @{$msg}{qw/command orig_command/};
-    my $prefix = $msg->{prefix};
-    my $target = $msg->{target};
-    my $param  = $msg->{params}[0];
-
-    my $user = $handle->get_users_by_nicks($target);
-    $self->send_ctcp_reply( $handle, $user, $cmd, $param ) unless $msg->{silent};
-
-    @_;
-}
-sub _event_ctcp_time {}
-sub _event_ctcp_version {}
-sub _event_ctcp_source {}
-
-sub _event_ctcp_clientinfo {
-    my ($self, $handle, $msg) = @_;
-    my ($cmd, $orig_cmd) = @{$msg}{qw/command orig_command/};
-    my $prefix = $msg->{prefix};
-    my $target = $msg->{target};
-    my $param  = $msg->{params}[0];
-    my $text   = $param && exists $CTCP_COMMAND_INFO{lc $param} ? $CTCP_COMMAND_INFO{lc $param}
-                                                                : uc(join ' ', @CTCP_COMMAND_LIST);
-
-    my $user = $handle->get_users_by_nicks($target);
-    $self->send_ctcp_reply( $handle, $user, $cmd, ":$text" ) unless $msg->{silent};
-
-    @_;
-}
-
-sub _event_ctcp_errmsg {}
-sub _event_ctcp_ping {}
-sub _event_ctcp_action {
-
-}
-
-
-# public function #
-
-sub check_params {
-    my ($self, $handle, $msg) = @_;
-    return () unless $self && $handle;
-    my $cmd   = $msg->{command};
-    my $param = $msg->{params}[0];
-
-    unless ($param) {
-        $self->need_more_params($handle, $cmd);
-        return ();
+    if (not $handle->registered) {
+        # You have not registered
+        $self->send_msg( $handle, ERR_NOTREGISTERED, "You have not registered" );
+    }
+    else {
+        # <query> is unknown
+        $self->send_ctcp_reply( $handle, $self->daemon, 'ERROR', $msg->{raw}, ':Query is unknown' );
     }
 
     @_;
 }
 
-sub is_valid_channel_name { $_[0] =~ /$REGEX{channel}/; }
-
-sub opt_parser { my %opt; $opt{$1} = $2 ? $2 : 1 while $_[0] =~ /(\w+)(?:=(\S+))?/g; %opt }
-
-sub decorate_text {
-    my ($text, $color) = @_;
-
-    $color ne '' ? "\03$color$text\03" : $text;
-}
-
-sub replace_crlf { $_[0] =~ s/[\r\n]+/ /gr; }
 
 # IrcGateway method #
+
+# accessor
+
+## read write
+sub charset {
+    return $_[0]->{charset} if not defined $_[1];
+    $_[0]->{charset} = $_[1];
+    $_[0]->{codec}   = find_encoding($_[1]);
+}
+
+sub err_charset {
+    return $_[0]->{err_charset} if not defined $_[1];
+    $_[0]->{err_charset} = $_[1];
+    $_[0]->{err_codec}   = find_encoding($_[1]);
+}
+
+## read only
+sub codec {
+    $_[0]->{codec};
+}
+
+sub err_codec {
+    $_[0]->{err_codec};
+}
+
+## alias
+sub to_prefix {
+    $_[0]->host;
+}
+
 
 # client to server
 sub handle_irc_msg {
@@ -971,7 +319,7 @@ sub handle_irc_msg {
     my $event = lc($msg->{command} || '');
        $event = exists $IRC_COMMAND_EVENT{"irc_$event"} ? "irc_$event" : 'irc';
 
-    $self->logger->debug("handle_irc_msg: $raw, ".Dumper(\%opts));
+#    $self->logger->debug("handle_irc_msg: $raw, ".Dumper(\%opts));
     $msg->{raw} = $raw;
     $msg->{$_}  = $opts{$_} for keys %opts;
     $self->event($event, $handle => $msg);
@@ -986,7 +334,7 @@ sub handle_ctcp_msg {
     $event = lc($msg->{command});
     $event = exists $CTCP_COMMAND_EVENT{"ctcp_$event"} ? "ctcp_$event" : 'ctcp';
 
-    $self->logger->debug("handle_ctcp_msg: $raw, ".Dumper(\%opts));
+#    $self->logger->debug("handle_ctcp_msg: $raw, ".Dumper(\%opts));
     $msg->{raw} = $raw;
     $msg->{$_}  = $opts{$_} for keys %opts;
     $self->event($event, $handle => $msg);
@@ -995,17 +343,20 @@ sub handle_ctcp_msg {
 # server to client
 sub send_msg {
     my ($self, $handle, $cmd, @args) = @_;
-    my $msg = mk_msg($self->to_prefix, $cmd, $handle->self->nick, @args);
-    $self->logger->debug("send_msg: $msg");
-    $handle->push_write($self->codec->encode($msg) . $CRLF);
+    $self->send_cmd($handle, $self->to_prefix, $cmd, $handle->self->nick, @args);
 }
 
 sub send_cmd {
     my ($self, $handle, $user, $cmd, @args) = @_;
-    my $prefix = ref $user eq 'Uc::IrcGateway::User' ? $user->to_prefix : $user;
-    my $msg = mk_msg($prefix, $cmd, @args);
-    $self->logger->debug("send_cmd: $msg");
-    $handle->push_write($self->codec->encode($msg) . $CRLF);
+    if (ref $handle and $handle->isa('Uc::IrcGateway::Connection')) {
+        my $prefix = ref $user && $user->isa('Uc::IrcGateway::User') ? $user->to_prefix : $user;
+        my $msg = mk_msg($prefix, $cmd, @args);
+#        $self->logger->debug("send_cmd: $msg");
+        $handle->push_write($self->codec->encode($msg) . $CRLF);
+    }
+    else {
+        say "send_cmd: $cmd: ", join ", ", @args;
+    }
 }
 
 sub send_ctcp_query {
@@ -1018,49 +369,6 @@ sub send_ctcp_reply {
     $self->send_cmd( $handle, $user, 'NOTICE', $handle->self->nick, encode_ctcp([uc($cmd), @args]) );
 }
 
-# other method
-sub to_prefix { $_[0]->host }
-
-sub need_more_params {
-    my ($self, $handle, $cmd) = @_;
-    $self->send_msg($handle, ERR_NEEDMOREPARAMS, $cmd, 'Not enough parameters');
-}
-
-sub welcome_message {
-    my ($self, $handle) = @_;
-    $self->send_msg( $handle, RPL_WELCOME, $self->welcome );
-    $self->send_msg( $handle, RPL_YOURHOST, "Your host is @{[ $self->servername ]} [@{[ $self->servername ]}/@{[ $self->port ]}]. @{[ ref($self).'/'.__PACKAGE__->VERSION ]}" );
-    $self->send_msg( $handle, RPL_CREATED, "This server was created ".$self->ctime );
-    $self->send_msg( $handle, RPL_MYINFO, "@{[ $self->servername ]} @{[ ref($self).'-'.__PACKAGE__->VERSION ]}" );
-
-    $self->handle_irc_msg( $handle, 'MOTD' );
-}
-
-sub check_user {
-    my ($self, $handle, $nick, %opt) = @_;
-    if (not $handle->has_nick($nick)) {
-        $self->send_msg( $handle, ERR_NOSUCHNICK, $nick, 'No such nick/channel' ) unless $opt{silent};
-        return 0;
-    }
-    return 1;
-}
-
-sub check_channel {
-    my ($self, $handle, $chan, %opt) = @_;
-    if (not is_valid_channel_name($chan)) {
-        $self->send_msg( $handle, ERR_NOSUCHCHANNEL, $chan, 'Invalid channel name' ) unless $opt{silent};
-        return 0;
-    }
-    if (($opt{enable} || $opt{joined}) && !$handle->has_channel($chan)) {
-        $self->send_msg( $handle, ERR_NOSUCHCHANNEL, $chan, 'No such channel' ) unless $opt{silent};
-        return 0;
-    }
-    if ($opt{joined} && !$handle->get_channels($chan)->has_user($handle->self->login)) {
-        $self->send_msg( $handle, ERR_NOTONCHANNEL, $chan, "You're not on that channel" ) unless $opt{silent};
-        return 0;
-    }
-    return 1;
-}
 
 
 1; # Magic true value required at end of module
@@ -1068,32 +376,36 @@ __END__
 
 =head1 NAME
 
-Uc::IrcGateway - [One line description of module's purpose here]
+Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラス
 
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version 2.1.2
+This document describes Uc::IrcGateway version 3.0.0
 
 
 =head1 SYNOPSIS
 
-    use Uc::IrcGateway;
+    package MyIrcGateway;
+    use parent qw(Uc::IrcGateway);
 
-=for author to fill in:
-    Brief code example(s) here showing commonest usage(s).
-    This section will be as far as many users bother reading
-    so make it as educational and exeplary as possible.
-  
-  
+    package main;
+
+    my $ircd = MyIrcGateway->new(
+        host => '0.0.0.0',
+        port => 6667,
+        time_zone => 'Asia/Tokyo',
+        debug => 1,
+    );
+
+    $ircd->run();
+    AE::cv->recv();
+
+
 =head1 DESCRIPTION
 
-=for author to fill in:
-    Write a full description of the module and its features here.
-    Use subsections (=head2, =head3) as appropriate.
 
-
-=head1 INTERFACE 
+=head1 INTERFACE
 
 =for author to fill in:
     Write a separate section listing the public components of the modules
@@ -1162,20 +474,10 @@ None reported.
 
 =head1 BUGS AND LIMITATIONS
 
-=for author to fill in:
-    A list of known problems with the module, together with some
-    indication Whether they are likely to be fixed in an upcoming
-    release. Also a list of restrictions on the features the module
-    does provide: data types that cannot be handled, performance issues
-    and the circumstances in which they may arise, practical
-    limitations on the size of data sets, special cases that are not
-    (yet) handled, etc.
-
 No bugs have been reported.
 
 Please report any bugs or feature requests to
-C<bug-uc-ircgateway@rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org>.
+L<https://github.com/UCormorant/p5-uc-ircgateway/issues>
 
 
 =head1 AUTHOR
@@ -1185,7 +487,7 @@ U=Cormorant  C<< <u@chimata.org> >>
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2011, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
+Copyright (c) 2011-2013, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
