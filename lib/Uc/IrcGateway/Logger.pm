@@ -3,77 +3,73 @@ package Uc::IrcGateway::Logger;
 use 5.014;
 use warnings;
 use utf8;
-use Any::Moose;
 
-=ignore
-methods:
-properties:
-options:
+use Carp qw(carp);
+use Scalar::Util qw(refaddr);
 
-=cut
+use parent qw(Object::Event);
 
+use Class::Accessor::Lite (
+    rw => [qw(
+        on_destroy
+        callbacks
+    )],
+);
 
-extends 'Object::Event', any_moose('::Object');
-# gateway
-has 'gateway' => ( is => 'ro', isa => 'Uc::IrcGateway', required => 1 );
-# log method does this function
-has 'logging'   => ( is => 'rw', isa => 'CodeRef', required => 1, default => sub { sub { undef } } );
-# debug method does this function
-has 'debugging' => ( is => 'rw', isa => 'CodeRef', required => 1, default => sub { sub { default_debugger(@_); }; } );
-# log level
-has [qw/log_level log_debug/] => ( is => 'rw', isa => 'Int', default => 0 );
-# DESTORY code
-has 'on_destroy' => ( is => 'rw', isa => 'CodeRef' );
+my $LOGGER;
 
-#__PACKAGE__->meta->make_immutable;
-no Any::Moose;
+sub import {
+    my ($class, %logger) = @_;
+
+    no strict 'refs';
+    *{"Uc::IrcGateway::logger"} = sub {
+        my ($ircd, $handle, $tag) = @_;
+        my $event = sprintf("%s_%s", refaddr($ircd), $tag);
+        my $handled = $LOGGER->event($event => @_);
+           $handled = $LOGGER->event($tag => @_) if not $handled;
+
+        carp "Tag:[$tag] is not registered in logger." if not $handled;
+    };
+    *{"Uc::IrcGateway::reg_logger"} = sub {
+        my ($ircd, %subs) = @_;
+        my $refaddr = refaddr($ircd);
+        my $callbacks = $LOGGER->callbacks;
+        while (my ($tag, $sub) = %subs) {
+            my $event = sprintf("%s_%s", $refaddr, $tag);
+            $callbacks->{$tag} = $LOGGER->reg_cb($event => $sub);
+        }
+    };
+    *{"Uc::IrcGateway::reg_logger_destroy"} = sub {
+        my ($ircd, $sub) = @_;
+        $LOGGER->on_destroy($sub);
+    };
+
+    $LOGGER = __PACKAGE__->new();
+}
 
 sub new {
     my $class = shift;
-    my $obj = $class->SUPER::new( @_ );
-    return $class->meta->new_object(
-        __INSTANCE__ => $obj,
-        @_,
+    my $logger = $class->SUPER::new;
+
+    $logger->reg_cb(
+        debug => \&debug,
+        warn => \&warn,
     );
-}
 
-sub BUILD {
-    my ($self, $args) = @_;
-
-    for my $key (keys %$args) {
-        next if $self->meta->has_method($key) or $key eq '__INSTANCE__';
-        $self->reg_cb($key => $args->{$key}) if ref $args->{$key} eq 'CODE';
-    }
-}
-
-sub default_debugger {
-    my ($self, $message, %args) = @_;
-
-    say $message;
-}
-
-sub log {
-    my ($self, $message, %args) = @_;
-    $args{level} //= 0;
-    return unless $self->log_level >= $args{level};
-
-    $self->logging->(@_);
+    $logger;
 }
 
 sub debug {
-    my ($self, $message, %args) = @_;
-    $args{level} //= 1;
-    return unless $self->log_debug >= $args{level};
-
-    $self->debugging->(@_);
+    my ($self, $ircd, $handle, $tag, $message, $level) = @_;
+    $message ||= "";
+    $level   ||= 0;
+    carp sprintf "[%s] %s", $tag, $message if $level < $ircd->debug;
 }
 
-sub AUTOLOAD {
-    our $AUTOLOAD;
-    my $self = shift;
-    (my $method = $AUTOLOAD) =~ s/.*:://;
-
-    $self->event($method, @_);
+sub warn {
+    my ($self, $ircd, $handle, $tag, $message) = @_;
+    $message ||= "";
+    carp sprintf "[%s] %s", $tag, $message;
 }
 
 sub DESTROY {

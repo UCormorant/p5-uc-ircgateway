@@ -7,7 +7,6 @@ use lib qw(lib ../lib);
 use Uc::IrcGateway;
 use IO::Socket::INET ();
 use Sys::Hostname qw(hostname);
-use Path::Class qw(file);
 use AnyEvent::IRC::Client ();
 use AE ();
 use Data::Dumper qw(Dumper);
@@ -31,7 +30,7 @@ subtest '#new' => sub {
         time_zone => 'Asia/Tokyo',
         servername => 'UcIrcServer',
         gatewayname => '*bot',
-        motd => file('motd.txt'),
+        motd => 'motd.txt',
         ping_timeout => 10,
         charset => 'euc-jp',
         err_charset => 'cp932',
@@ -74,7 +73,7 @@ subtest '#new' => sub {
         is($ircd->time_zone, $args{time_zone}, 'check time_zone');
         is($ircd->servername, $args{servername}, 'check servername');
         is($ircd->gatewayname, $args{gatewayname}, 'check gatewayname');
-        is($ircd->motd->stringify, $args{motd}->stringify, 'check motd');
+        is($ircd->motd->stringify, $args{motd}, 'check motd');
         is($ircd->ping_timeout, $args{ping_timeout}, 'check ping_timeout');
         is($ircd->to_prefix, $ircd->host, 'check to_prefix');
         is($ircd->charset, $args{charset}, 'check charset');
@@ -95,10 +94,9 @@ subtest '#run' => sub {
         server => $server_code,
         client => sub {
             my $port = shift;
-            my $conn = IO::Socket::INET->new("127.0.0.1:$port");
+            my $conn = IO::Socket::INET->new(PeerAddr => "127.0.0.1:$port", Timeout => 1);
 
-            $conn->print("PING$CRLF");
-            ok($conn->getline, "check communication");
+            ok($conn, "check connection");
         },
     );
 };

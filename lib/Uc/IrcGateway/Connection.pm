@@ -16,6 +16,7 @@ use Class::Accessor::Lite (
     rw => [qw(registered)],
     ro => [ qw(
         self
+        ircd
         schema
 
         options
@@ -30,6 +31,7 @@ sub new {
 
     $class->SUPER::new(
         self => Uc::IrcGateway::User->new(),
+        ircd => undef,
         schema => {},
 
         options => {},

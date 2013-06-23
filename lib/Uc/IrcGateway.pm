@@ -4,9 +4,10 @@ use 5.014;
 use warnings;
 use utf8;
 
-use parent qw(Object::Event);
+use parent qw(Class::Component Object::Event);
 
 use Uc::IrcGateway::Connection;
+use Uc::IrcGateway::Logger;
 use Uc::IrcGateway::User;
 
 use AnyEvent::Socket qw(tcp_server);
@@ -15,7 +16,7 @@ use AnyEvent::IRC::Util qw(
     prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
 );
 use DBD::SQLite 1.027;
-use Carp qw(croak);
+use Carp qw(carp croak);
 use Encode qw(find_encoding);
 use Path::Class qw(file);
 use Sys::Hostname qw(hostname);
@@ -26,7 +27,7 @@ use YAML::XS ();
 use JSON::XS ();
 
 use Class::Accessor::Lite (
-    rw => [ qw(
+    ro => [ qw(
         host
         port
         time_zone
@@ -36,10 +37,9 @@ use Class::Accessor::Lite (
         motd
         ping_timeout
         debug
-    )],
-    ro => [ qw(
-        handles
         ctime
+
+        handles
     )],
 );
 
@@ -63,47 +63,8 @@ our %REGEX = (
     nickname => qr{^[\w][-\w$SPECIAL]*$}, # 文字数制限,先頭の数字禁止は扱いづらいのでしません
 );
 our %IRC_COMMAND_EVENT = ();
-our @IRC_COMMAND_LIST_ALL = qw(
-    pass nick user oper quit
-    join part mode invite kick
-    topic privmsg notice away
-    names list who whois whowas
-    users userhost ison
-
-    service squery
-
-    server squit wallops
-    motd version time admin info
-    lusers stats links servlist
-    connect trace
-    kill rehash die restart summon wallops
-
-    ping pong error
-);
-our @IRC_COMMAND_LIST = qw(
-    nick user quit
-    join part mode invite
-    topic privmsg notice away
-    names list who whois
-    ison
-
-    motd
-
-    ping pong
-);
 
 our %CTCP_COMMAND_EVENT = ();
-our @CTCP_COMMAND_LIST_ALL = qw(
-    finger userinfo time
-    version source
-    clientinfo errmsg ping
-    action dcc sed
-);
-our @CTCP_COMMAND_LIST = qw(
-    userinfo
-    clientinfo
-    action
-);
 our %CTCP_COMMAND_INFO = (
     clientinfo => 'CLIENTINFO with 0 arguments gives a list of known client query keywords. With 1 argument, a description of the client query keyword is returned.',
 );
@@ -117,33 +78,54 @@ our @EXPORT = qw(
 );
 push @EXPORT, values %AnyEvent::IRC::Util::RFC_NUMCODE_MAP;
 
+sub event_irc_command  { \%IRC_COMMAND_EVENT  }
+sub event_ctcp_command { \%CTCP_COMMAND_EVENT }
 
 sub new {
     my $class = shift;
     my %args = @_ == 1 ? %{$_[0]} : @_;
+    my $self = $class->SUPER::new(\%args);
 
-    my $self = bless +{
-        debug => 0,
+    $self->init_object_events();
+    $self->{_init_object_events} = 1;
 
-        host => '127.0.0.1',
-        port => 6667,
-        time_zone => 'local',
-        servername => scalar hostname(),
-        gatewayname => '*ucircgd',
-        motd => file($0 =~ s/(.*)\.\w+$/$1.motd.txt/r),
-        ping_timeout => 30,
+    # TODO: オプションの値チェック
 
-        charset     => 'utf8',
-        err_charset => ($^O eq 'MSWin32' ? 'cp932' : 'utf8'),
+    $self->{debug}        //= 0;
+    $self->{host}         //= '127.0.0.1';
+    $self->{port}         //= 6667;
+    $self->{time_zone}    //= 'local';
+    $self->{servername}   //= scalar hostname();
+    $self->{gatewayname}  //= '*ucircd';
+    $self->{ping_timeout} //= 30;
+    $self->{charset}      //= 'utf8';
+    $self->{err_charset}  //= $^O eq 'MSWin32' ? 'cp932' : 'utf8';
 
-        handles => {},
-
-        %args,
-    }, $class;
-
-    $self->daemon(Uc::IrcGateway::User->new(nick => $self->gatewayname));
     $self->{codec}     = find_encoding($self->charset);
     $self->{err_codec} = find_encoding($self->err_charset);
+
+    $self->{motd}      = file($self->{motd} || $0 =~ s/(.*)\.\w+$/$1.motd.txt/r);
+    $self->{daemon}    = Uc::IrcGateway::User->new(nick => $self->gatewayname);
+    $self->{codec}     = find_encoding($self->charset);
+    $self->{err_codec} = find_encoding($self->err_charset);
+
+    $self->{handles} = {};
+
+    my $irc_event = $self->event_irc_command;
+    my $ctcp_event = $self->event_ctcp_command;
+    for my $event ((values $irc_event), (values $ctcp_event)) {
+        $event->{guard} = $self->reg_cb($event->{name} => $event->{code});
+    }
+
+    $self->reg_cb(
+        on_eof => sub {
+            my ($self, $handle) = @_;
+        },
+        on_error => sub {
+            my ($self, $handle, $fatal, $message) = @_;
+            carp "[$fatal] $message";
+        },
+    );
 
     $self;
 }
@@ -174,7 +156,10 @@ sub run {
 
     tcp_server $self->host, $self->port, sub {
         my ($fh, $host, $port) = @_;
-        my $handle = Uc::IrcGateway::Connection->new(fh => $fh,
+        my $handle = Uc::IrcGateway::Connection->new(
+            fh => $fh,
+            ircd => $self,
+
             on_error => sub {
                 my ($handle, $fatal, $message) = @_;
                 $self->event('on_error', $handle, $fatal, $message);
@@ -187,8 +172,6 @@ sub run {
             },
         );
         $handle->on_read(sub {
-            # \015* for some broken servers, which might have an extra
-            # carriage return in their MOTD.
             $_[0]->push_read(line => $REGEX{crlf}, sub {
                 my ($handle, $line, $eol) = @_;
                 $line =~ s/$REGEX{chomp}//g;
@@ -202,35 +185,6 @@ sub run {
 
         say "Bound to $host:$port";
 
-        print "Mapping event... "; print "\n" if $self->debug;
-        my ($irc_method, $ctcp_method) = ('_event_irc', '_event_ctcp');
-        $IRC_COMMAND_EVENT{irc} = $self->can($irc_method);
-        $CTCP_COMMAND_EVENT{ctcp} = $self->can($ctcp_method);
-
-        for my $cmd (@IRC_COMMAND_LIST) {
-            my $method = $irc_method; $method .= "_$cmd" if $self->can($method."_$cmd");
-            say "    irc_cmd: ".uc("$cmd => ").scalar $self->which($method) if $self->debug;
-            $IRC_COMMAND_EVENT{"irc_$cmd"} = $self->can($method);
-        }
-        for my $cmd (@CTCP_COMMAND_LIST) {
-            my $method = $ctcp_method; $method .= "_$cmd" if $self->can($method."_$cmd");
-            say "    ctcp_cmd: ".uc("$cmd => ").scalar $self->which($method) if $self->debug;
-            $CTCP_COMMAND_EVENT{"ctcp_$cmd"} = $self->can($method);
-        }
-
-        $self->reg_cb(
-            %IRC_COMMAND_EVENT, %CTCP_COMMAND_EVENT,
-
-            on_eof => sub {
-                my ($self, $handle) = @_;
-            },
-            on_error => sub {
-                my ($self, $handle, $fatal, $message) = @_;
-                warn "[$fatal] $message";
-            },
-        );
-        say "done.";
-
         say "Starting '@{[ $self->servername ]}' is succeed.";
         say "@{[ $self->servername ]} settings:";
         say "   - Listen on @{[ $self->host.':'.$self->port ]}";
@@ -239,6 +193,18 @@ sub run {
         say "   - Gateway bot is @{[ $self->gatewayname ]}";
 #        say "   - Setting files are in @{[ $self->set_dir ]}";
         say "   - Message Of The Day uses @{[ scalar $self->motd ]}";
+
+        if ($self->debug) {
+            say "Show IRC/CTCP command list:" ;
+            my $irc_event = $self->event_irc_command;
+            my $ctcp_event = $self->event_ctcp_command;
+            for my $command (sort keys $irc_event) {
+                say sprintf "    IRC: %s => %s::%s", uc($command), ref $irc_event->{$command}{plugin}, $irc_event->{$command}{method};
+            }
+            for my $command (sort keys $ctcp_event) {
+                say sprintf "    CTCP: %s => %s::%s", uc($command), ref $ctcp_event->{$command}{plugin}, $ctcp_event->{$command}{method};
+            }
+        }
     };
 }
 
@@ -319,7 +285,7 @@ sub handle_irc_msg {
     my $event = lc($msg->{command} || '');
        $event = exists $IRC_COMMAND_EVENT{"irc_$event"} ? "irc_$event" : 'irc';
 
-#    $self->logger->debug("handle_irc_msg: $raw, ".Dumper(\%opts));
+    $self->logger($handle, debug => "handle_irc_msg: $raw, ".JSON::XS->new->pretty(1)->encode(\%opts));
     $msg->{raw} = $raw;
     $msg->{$_}  = $opts{$_} for keys %opts;
     $self->event($event, $handle => $msg);
@@ -334,7 +300,7 @@ sub handle_ctcp_msg {
     $event = lc($msg->{command});
     $event = exists $CTCP_COMMAND_EVENT{"ctcp_$event"} ? "ctcp_$event" : 'ctcp';
 
-#    $self->logger->debug("handle_ctcp_msg: $raw, ".Dumper(\%opts));
+    $self->logger($handle, debug => "handle_ctcp_msg: $raw, ".JSON::XS->new->pretty(1)->encode(\%opts));
     $msg->{raw} = $raw;
     $msg->{$_}  = $opts{$_} for keys %opts;
     $self->event($event, $handle => $msg);
@@ -351,7 +317,7 @@ sub send_cmd {
     if (ref $handle and $handle->isa('Uc::IrcGateway::Connection')) {
         my $prefix = ref $user && $user->isa('Uc::IrcGateway::User') ? $user->to_prefix : $user;
         my $msg = mk_msg($prefix, $cmd, @args);
-#        $self->logger->debug("send_cmd: $msg");
+        $self->logger($handle, debug => "send_cmd: $msg");
         $handle->push_write($self->codec->encode($msg) . $CRLF);
     }
     else {
@@ -388,6 +354,7 @@ This document describes Uc::IrcGateway version 3.0.0
 
     package MyIrcGateway;
     use parent qw(Uc::IrcGateway);
+    __PACKAGE__->load_plugins(qw/DefaultSet/);
 
     package main;
 
