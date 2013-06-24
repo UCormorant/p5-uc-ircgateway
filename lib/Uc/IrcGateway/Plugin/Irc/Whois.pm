@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Whois;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('WHOIS') {
     my ($self, $handle, $msg) = check_params(@_);
@@ -38,3 +37,5 @@ sub action :IrcEvent('WHOIS') {
 
     @_;
 }
+
+1;

@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Invite;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('INVITE') {
     my ($self, $handle, $msg) = check_params(@_);
@@ -41,3 +40,5 @@ sub action :IrcEvent('INVITE') {
 
     @_;
 }
+
+1;

@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Away;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('AWAY') {
     my ($self, $handle, $msg) = @_;
@@ -17,3 +16,5 @@ sub action :IrcEvent('AWAY') {
 
     @_;
 }
+
+1;

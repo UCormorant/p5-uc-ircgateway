@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Quit;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('QUIT') {
     my ($self, $handle, $msg) = @_;
@@ -15,3 +14,5 @@ sub action :IrcEvent('QUIT') {
 
     $handle->push_shutdown; # close connection
 }
+
+1;

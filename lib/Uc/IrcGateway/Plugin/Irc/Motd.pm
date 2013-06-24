@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Motd;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('MOTD') {
     my ($self, $handle, $msg) = @_;
@@ -26,3 +25,5 @@ sub action :IrcEvent('MOTD') {
 
     @_;
 }
+
+1;

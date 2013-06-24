@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Names;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('NAMES') {
     my ($self, $handle, $msg) = @_;
@@ -45,3 +44,5 @@ sub action :IrcEvent('NAMES') {
 
     @_;
 }
+
+1;

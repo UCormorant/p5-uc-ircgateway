@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::DefaultSet;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 our @IRC_COMMAND_LIST_ALL = qw(
     pass nick user oper quit
@@ -47,6 +46,7 @@ our @CTCP_COMMAND_LIST = qw(
 sub init {
     my ($self, $c) = @_;
     $c->load_plugins(map { sprintf "Irc::%s", ucfirst lc $_ } @IRC_COMMAND_LIST);
+    $c->load_plugins(map { sprintf "Ctcp::%s", ucfirst lc $_ } @CTCP_COMMAND_LIST);
 }
 
 1;

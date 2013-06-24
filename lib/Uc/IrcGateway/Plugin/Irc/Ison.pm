@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Ison;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('ISON') {
     my ($self, $handle, $msg) = check_params(@_);
@@ -17,3 +16,5 @@ sub action :IrcEvent('ISON') {
 
     @_;
 }
+
+1;

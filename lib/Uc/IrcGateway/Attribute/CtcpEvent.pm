@@ -1,7 +1,5 @@
 package Uc::IrcGateway::Attribute::CtcpEvent;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Attribute';
 
 sub register {
@@ -11,11 +9,12 @@ sub register {
     my $event_code = sub { $code->(@_, $plugin); };
     my $ctcp_event = $c->event_ctcp_command;
 
-    $ctcp_event->{$command}         = {}
+    $ctcp_event->{$command}         = {};
     $ctcp_event->{$command}{code}   = $event_code;
     $ctcp_event->{$command}{name}   = $event_name;
     $ctcp_event->{$command}{plugin} = $plugin;
     $ctcp_event->{$command}{method} = $method;
     $ctcp_event->{$command}{guard}  = $c->reg_cb($event_name => $event_code) if $c->{_init_object_events};
 }
+
 1;

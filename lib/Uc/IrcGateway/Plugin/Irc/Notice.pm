@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Notice;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('NOTICE') {
     my ($self, $handle, $msg) = check_params(@_);
@@ -63,3 +62,5 @@ sub action :IrcEvent('NOTICE') {
 
     @_;
 }
+
+1;

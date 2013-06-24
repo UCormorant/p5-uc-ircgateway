@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Privmsg;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('PRIVMSG') {
     my ($self, $handle, $msg) = check_params(@_);
@@ -63,3 +62,5 @@ sub action :IrcEvent('PRIVMSG') {
 
     @_;
 }
+
+1;

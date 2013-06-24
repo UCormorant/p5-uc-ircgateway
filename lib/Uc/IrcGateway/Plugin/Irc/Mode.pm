@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Mode;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('MODE') {
     my ($self, $handle, $msg) = check_params(@_);
@@ -146,3 +145,5 @@ sub action :IrcEvent('MODE') {
 
     @_;
 }
+
+1;

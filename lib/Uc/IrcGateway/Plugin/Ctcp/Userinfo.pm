@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Ctcp::Userinfo;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :CtcpEvent('USERINFO') {
     my ($self, $handle, $msg) = @_;
@@ -16,3 +15,5 @@ sub action :CtcpEvent('USERINFO') {
 
     @_;
 }
+
+1;

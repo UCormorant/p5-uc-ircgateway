@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::List;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('LIST') {
     my ($self, $handle, $msg) = @_;
@@ -27,3 +26,5 @@ sub action :IrcEvent('LIST') {
 
     @_;
 }
+
+1;

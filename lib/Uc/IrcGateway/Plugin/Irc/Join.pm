@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Join;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('JOIN') {
     my ($self, $handle, $msg, $plugin) = check_params(@_);
@@ -32,3 +31,5 @@ sub action :IrcEvent('JOIN') {
 
     @_;
 }
+
+1;

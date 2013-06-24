@@ -5,6 +5,8 @@ use Test::Difflet;
 
 use lib qw(lib ../lib);
 use Uc::IrcGateway;
+Uc::IrcGateway->load_plugins(qw/DefaultSet/);
+
 use IO::Socket::INET ();
 use Sys::Hostname qw(hostname);
 use AnyEvent::IRC::Client ();

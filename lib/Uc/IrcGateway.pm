@@ -1,20 +1,9 @@
 package Uc::IrcGateway v3.0.0;
-
 use 5.014;
-use warnings;
-use utf8;
-
 use parent qw(Class::Component Object::Event);
-
-use Uc::IrcGateway::Connection;
-use Uc::IrcGateway::Logger;
-use Uc::IrcGateway::User;
+use Uc::IrcGateway::Common;
 
 use AnyEvent::Socket qw(tcp_server);
-use AnyEvent::IRC::Util qw(
-    mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
-    prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
-);
 use DBD::SQLite 1.027;
 use Carp qw(carp croak);
 use Encode qw(find_encoding);
@@ -22,7 +11,6 @@ use Path::Class qw(file);
 use Sys::Hostname qw(hostname);
 use Scalar::Util qw(refaddr);
 use IO::Socket::INET ();
-use UNIVERSAL::which ();
 use YAML::XS ();
 use JSON::XS ();
 
@@ -43,40 +31,11 @@ use Class::Accessor::Lite (
     )],
 );
 
-BEGIN {
-    no strict 'refs';
-    while (my ($code, $name) = each %AnyEvent::IRC::Util::RFC_NUMCODE_MAP) {
-        *{$name} = sub () { $code };
-    }
-}
-
-our $MAXBYTE  = 512;
-our $NUL      = "\0";
-our $BELL     = "\07";
-our $CRLF     = "\015\012";
-our $SPECIAL  = '\[\]\\\`\_\^\{\|\}';
-our $SPCRLFCL = " $CRLF:";
-our %REGEX = (
-    crlf     => qr{\015*\012},
-    chomp    => qr{[$CRLF$NUL]+$},
-    channel  => qr{^(?:[#+&]|![A-Z0-9]{5})[^$SPCRLFCL,$BELL]+(?:\:[^$SPCRLFCL,$BELL]+)?$},
-    nickname => qr{^[\w][-\w$SPECIAL]*$}, # 文字数制限,先頭の数字禁止は扱いづらいのでしません
-);
 our %IRC_COMMAND_EVENT = ();
-
 our %CTCP_COMMAND_EVENT = ();
 our %CTCP_COMMAND_INFO = (
     clientinfo => 'CLIENTINFO with 0 arguments gives a list of known client query keywords. With 1 argument, a description of the client query keyword is returned.',
 );
-
-our @EXPORT = qw(
-    check_params is_valid_channel_name
-    opt_parser decorate_text replace_crlf
-
-    mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
-    prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
-);
-push @EXPORT, values %AnyEvent::IRC::Util::RFC_NUMCODE_MAP;
 
 sub event_irc_command  { \%IRC_COMMAND_EVENT  }
 sub event_ctcp_command { \%CTCP_COMMAND_EVENT }
@@ -114,6 +73,7 @@ sub new {
     my $irc_event = $self->event_irc_command;
     my $ctcp_event = $self->event_ctcp_command;
     for my $event ((values $irc_event), (values $ctcp_event)) {
+        say "$event->{name}";
         $event->{guard} = $self->reg_cb($event->{name} => $event->{code});
     }
 
@@ -195,7 +155,7 @@ sub run {
         say "   - Message Of The Day uses @{[ scalar $self->motd ]}";
 
         if ($self->debug) {
-            say "Show IRC/CTCP command list:" ;
+            say "IRC/CTCP command list:" ;
             my $irc_event = $self->event_irc_command;
             my $ctcp_event = $self->event_ctcp_command;
             for my $command (sort keys $irc_event) {
@@ -282,8 +242,8 @@ sub to_prefix {
 sub handle_irc_msg {
     my ($self, $handle, $raw, %opts) = @_;
     my $msg   = parse_irc_msg($raw);
-    my $event = lc($msg->{command} || '');
-       $event = exists $IRC_COMMAND_EVENT{"irc_$event"} ? "irc_$event" : 'irc';
+    my $event = uc($msg->{command} || '');
+       $event = exists $IRC_COMMAND_EVENT{$event} ? "irc_event_$event" : 'irc';
 
     $self->logger($handle, debug => "handle_irc_msg: $raw, ".JSON::XS->new->pretty(1)->encode(\%opts));
     $msg->{raw} = $raw;
@@ -297,8 +257,8 @@ sub handle_ctcp_msg {
 
     @{$msg}{qw/command params/} = split(' ', $raw, 2);
     $msg->{params} = [$msg->{params}];
-    $event = lc($msg->{command});
-    $event = exists $CTCP_COMMAND_EVENT{"ctcp_$event"} ? "ctcp_$event" : 'ctcp';
+    $event = uc($msg->{command});
+    $event = exists $CTCP_COMMAND_EVENT{$event} ? "ctcp_event_$event" : 'ctcp';
 
     $self->logger($handle, debug => "handle_ctcp_msg: $raw, ".JSON::XS->new->pretty(1)->encode(\%opts));
     $msg->{raw} = $raw;

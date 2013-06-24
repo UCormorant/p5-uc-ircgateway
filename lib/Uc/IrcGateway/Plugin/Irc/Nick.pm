@@ -1,8 +1,7 @@
 package Uc::IrcGateway::Plugin::Irc::Nick;
 use 5.014;
-use warnings;
-use utf8;
 use parent 'Class::Component::Plugin';
+use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('NICK') {
     my ($self, $handle, $msg, $plugin) = @_;
@@ -51,3 +50,5 @@ sub action :IrcEvent('NICK') {
 
     @_;
 }
+
+1;
