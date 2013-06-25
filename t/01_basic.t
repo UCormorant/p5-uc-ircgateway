@@ -1,3 +1,4 @@
+use utf8;
 use strict;
 use Test::More tests => 3;
 use Test::TCP;
@@ -36,6 +37,7 @@ subtest '#new' => sub {
         ping_timeout => 10,
         charset => 'euc-jp',
         err_charset => 'cp932',
+        welcome_message => 'ようこそ',
 
         test_option1 => 'foo',
         test_option2 => ['bar'],
@@ -67,6 +69,7 @@ subtest '#new' => sub {
     ok(defined $ircd->err_charset, 'check err_charset');
     like(ref $ircd->codec, qr/^Encode::/, 'check codec');
     like(ref $ircd->err_codec, qr/^Encode::/, 'check err_codec');
+    ok(defined $ircd->welcome_message, 'check welcome_message');
 
     for $ircd (Uc::IrcGateway->new(%args), Uc::IrcGateway->new(\%args)) {
         ok($ircd, '#new with arguments');
@@ -82,6 +85,7 @@ subtest '#new' => sub {
         is($ircd->err_charset, $args{err_charset}, 'check err_charset');
         is($ircd->codec->name, $args{charset}, 'check codec');
         is($ircd->err_codec->name, $args{err_charset}, 'check err_codec');
+        is($ircd->welcome_message, $args{welcome_message}, 'check welcome_message');
 
         is_deeply(
             [@{$ircd}{qw/test_option1 test_option2 test_option3/}],

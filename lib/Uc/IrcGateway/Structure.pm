@@ -1,9 +1,8 @@
 package Uc::IrcGateway::Structure;
-
 use 5.014;
-use warnings;
-use utf8;
+use Uc::IrcGateway::Common;
 use parent qw(Teng Exporter);
+__PACKAGE__->load_plugin('DBIC::ResultSet');
 
 use Carp qw(croak);
 use DBI qw(:sql_types);
@@ -176,6 +175,7 @@ table {
         { name => "local_operator", type => SQL_BOOLEAN },
         { name => "allow_s_notice", type => SQL_BOOLEAN },
     );
+    row_class "Uc::IrcGateway::User";
 };
 
 table {
@@ -190,8 +190,13 @@ table {
 };
 
 
-package Uc::Model::Twitter::Structure::Row::Channel;
-use parent qw(Uc::Model::Twitter:Channel Teng::Row);
+package Uc::IrcGateway::Structure::Row::Channel;
+use parent qw(Teng::Row Uc::IrcGateway::Channel);
+
+sub new {
+    my $class = shift;
+    $class->SUPER::new(@_);
+}
 
 sub users { # has_many
     my $self = shift;
@@ -209,41 +214,22 @@ sub speakers { # has_many
 }
 
 
-package Uc::Model::Twitter::Structure::Row::User;
-use parent qw(Uc::Model::Twitter:User Teng::Row);
-
-sub channels { # has_many
-    my $self = shift;
-    $self->{teng}->search('channel_user', { u_login => $self->login, @_ });
-}
-
-sub operator_channles { # has_many
-    my $self = shift;
-    $self->channels( operator => 1, @_ );
-}
-
-sub speaker_channles { # has_many
-    my $self = shift;
-    $self->channels( speaker => 1, @_ );
-}
-
-
-package Uc::Model::Twitter::Structure::Row::ChannelUser;
+package Uc::IrcGateway::Structure::Row::ChannelUser;
 use parent 'Teng::Row';
 
 sub channel { # blongs_to
     my $self = shift;
-    $self->{teng}->single('channel', { name => $self->c_name, @_ });
+    $self->handle->single('channel', { name => $self->c_name, @_ });
 }
 
 sub users { # has_many
     my $self = shift;
-    $self->{teng}->search('user', { login => $self->u_login, @_ });
+    $self->handle->search('user', { login => $self->u_login, @_ });
 }
 
 sub user { # blongs_to
     my $self = shift;
-    $self->{teng}->single('user', { login => $self->u_login, @_ });
+    $self->handle->single('user', { login => $self->u_login, @_ });
 }
 
 

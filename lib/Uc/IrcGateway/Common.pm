@@ -6,6 +6,7 @@ use parent 'Exporter';
 
 use Uc::IrcGateway::Connection;
 use Uc::IrcGateway::Logger;
+use Uc::IrcGateway::TempUser;
 use Uc::IrcGateway::User;
 
 use AnyEvent::IRC::Util qw(

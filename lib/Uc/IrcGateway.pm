@@ -4,7 +4,6 @@ use parent qw(Class::Component Object::Event);
 use Uc::IrcGateway::Common;
 
 use AnyEvent::Socket qw(tcp_server);
-use DBD::SQLite 1.027;
 use Carp qw(carp croak);
 use Encode qw(find_encoding);
 use Path::Class qw(file);
@@ -15,16 +14,20 @@ use YAML::XS ();
 use JSON::XS ();
 
 use Class::Accessor::Lite (
-    ro => [ qw(
-        host
-        port
+    rw => [qw(
+        debug
         time_zone
         servername
         gatewayname
-        daemon
+
         motd
         ping_timeout
-        debug
+        welcome_message
+    )],
+    ro => [qw(
+        host
+        port
+        daemon
         ctime
 
         handles
@@ -50,21 +53,22 @@ sub new {
 
     # TODO: オプションの値チェック
 
-    $self->{debug}        //= 0;
-    $self->{host}         //= '127.0.0.1';
-    $self->{port}         //= 6667;
-    $self->{time_zone}    //= 'local';
-    $self->{servername}   //= scalar hostname();
-    $self->{gatewayname}  //= '*ucircd';
-    $self->{ping_timeout} //= 30;
-    $self->{charset}      //= 'utf8';
-    $self->{err_charset}  //= $^O eq 'MSWin32' ? 'cp932' : 'utf8';
+    $self->{debug}           //= 0;
+    $self->{host}            //= '127.0.0.1';
+    $self->{port}            //= 6667;
+    $self->{time_zone}       //= 'local';
+    $self->{servername}      //= scalar hostname();
+    $self->{gatewayname}     //= '*ucircd';
+    $self->{ping_timeout}    //= 30;
+    $self->{charset}         //= 'utf8';
+    $self->{err_charset}     //= $^O eq 'MSWin32' ? 'cp932' : 'utf8';
+    $self->{welcome_message} //= 'Welcome!';
 
     $self->{codec}     = find_encoding($self->charset);
     $self->{err_codec} = find_encoding($self->err_charset);
 
     $self->{motd}      = file($self->{motd} || $0 =~ s/(.*)\.\w+$/$1.motd.txt/r);
-    $self->{daemon}    = Uc::IrcGateway::User->new(nick => $self->gatewayname);
+    $self->{daemon}    = Uc::IrcGateway::TempUser->new(nick => $self->gatewayname, login => '*', host => $self->host);
     $self->{codec}     = find_encoding($self->charset);
     $self->{err_codec} = find_encoding($self->err_charset);
 
@@ -73,7 +77,6 @@ sub new {
     my $irc_event = $self->event_irc_command;
     my $ctcp_event = $self->event_ctcp_command;
     for my $event ((values $irc_event), (values $ctcp_event)) {
-        say "$event->{name}";
         $event->{guard} = $self->reg_cb($event->{name} => $event->{code});
     }
 
@@ -295,6 +298,45 @@ sub send_ctcp_reply {
     $self->send_cmd( $handle, $user, 'NOTICE', $handle->self->nick, encode_ctcp([uc($cmd), @args]) );
 }
 
+
+
+# other method
+
+sub send_welcome {
+    my ($self, $handle) = @_;
+    $self->send_msg( $handle, RPL_WELCOME, $self->welcome_message );
+    $self->send_msg( $handle, RPL_YOURHOST, "Your host is @{[ $self->servername ]} [@{[ $self->servername ]}/@{[ $self->port ]}]. @{[ ref($self).'/'.$self->VERSION ]}" );
+    $self->send_msg( $handle, RPL_CREATED, "This server was created ".$self->ctime );
+    $self->send_msg( $handle, RPL_MYINFO, "@{[ $self->servername ]} @{[ ref($self).'-'.$self->VERSION ]}" );
+
+    $self->handle_irc_msg( $handle, 'MOTD' );
+}
+
+sub check_user {
+    my ($self, $handle, $nick, %opt) = @_;
+    if (not $handle->has_nick($nick)) {
+        $self->send_msg( $handle, ERR_NOSUCHNICK, $nick, 'No such nick/channel' ) unless $opt{silent};
+        return 0;
+    }
+    return 1;
+}
+
+sub check_channel {
+    my ($self, $handle, $chan, %opt) = @_;
+    if (not is_valid_channel_name($chan)) {
+        $self->send_msg( $handle, ERR_NOSUCHCHANNEL, $chan, 'Invalid channel name' ) unless $opt{silent};
+        return 0;
+    }
+    if (($opt{enable} || $opt{joined}) && !$handle->has_channel($chan)) {
+        $self->send_msg( $handle, ERR_NOSUCHCHANNEL, $chan, 'No such channel' ) unless $opt{silent};
+        return 0;
+    }
+    if ($opt{joined} && !$handle->get_channels($chan)->has_user($handle->self->login)) {
+        $self->send_msg( $handle, ERR_NOTONCHANNEL, $chan, "You're not on that channel" ) unless $opt{silent};
+        return 0;
+    }
+    return 1;
+}
 
 
 1; # Magic true value required at end of module

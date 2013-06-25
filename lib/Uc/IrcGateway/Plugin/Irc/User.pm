@@ -4,13 +4,13 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('USER') {
-    my ($self, $handle, $msg) = check_params(@_);
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
     return () unless $self && $handle;
 
     my ($login, $host, $server, $realname) = @{$msg->{params}};
     my $cmd  = $msg->{command};
     my $user = $handle->self;
-    if (defined $user && $user->registered) {
+    if (defined $user && ref $user->isa('Uc::IrcGateway::User')) {
         $self->send_msg( $handle, ERR_ALREADYREGISTRED, 'Unauthorized command (already registered)' );
         return ();
     }
@@ -22,17 +22,15 @@ sub action :IrcEvent('USER') {
         $user->host($host);
         $user->addr($self->host);
         $user->server($server);
-        $user->registered(1);
+        $user->register($handle);
         $msg->{registered} = 1;
-        $handle->set_users($user);
-        $self->welcome_message( $handle );
+        $self->send_welcome( $handle );
     }
     else {
-        $user = Uc::IrcGateway::User->new(
-            nick => '', login => $login, realname => $realname,
+        $handle->self(Uc::IrcGateway::TempUser->new(
+            login => $login, realname => $realname,
             host => $host, addr => $self->host, server => $server,
-        );
-        $handle->self($user);
+        ));
     }
 
     @_;

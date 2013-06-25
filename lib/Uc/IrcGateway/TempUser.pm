@@ -1,28 +1,66 @@
-package Uc::IrcGateway::User;
-use parent 'Teng::Row';
+package Uc::IrcGateway::TempUser;
+
+use 5.014;
+use warnings;
+use utf8;
+use JSON::XS ();
+
+use Carp qw(croak);
+
+our %MODE_TABLE;
+our @USER_PROP;
+
+BEGIN {
+    our %MODE_TABLE = (
+        away           => 'a', # Away
+        invisible      => 'i', # Invisible
+        allow_wallops  => 'w', # allow Wallops receiving
+        allow_s_notice => 's', # allow Server notice receiving
+        restricted     => 'r', # Restricted user connection
+        operator       => 'o', # Operator flag
+        local_operator => 'O', # local Operator flag
+    );
+    our @USER_PROP = (qw(
+        login nick password realname host addr server
+        userinfo away_message last_modified
+    ), sort keys %MODE_TABLE);
+}
+use Class::Accessor::Lite rw => \@USER_PROP;
+
+# constructer
 
 sub new {
     my $class = shift;
-    $class->SUPER::new(@_);
+    my %args = @_ == 1 ? %{$_[0]} : @_;
+
+    bless +{
+        %args,
+    }, $class;
 }
 
-sub channels { # has_many
-    my $self = shift;
-    $self->{teng}->search('channel_user', { u_login => $self->login, @_ });
-}
+# other method
 
-sub operator_channles { # has_many
-    my $self = shift;
-    $self->channels( operator => 1, @_ );
-}
+sub register {
+    my ($self, $handle) = @_;
 
-sub speaker_channles { # has_many
-    my $self = shift;
-    $self->channels( speaker => 1, @_ );
+    croak "user registration error: nick is not defined"  if not $self->nick;
+    croak "user registration error: login is not defined" if not $self->login;
+
+    my $user = $handle->schema->insert('user', $self->user_prop);
+    $handle->self($user);
+    $user;
 }
 
 sub to_prefix {
-    sprintf "%s!%s@%s", $_[0]->nick, $_[0]->login, $_[0]->host;
+    sprintf "%s!%s@%s", "*", "*", "*";
+}
+
+sub user_prop {
+    +{ map { defined $_[0]{$_} ? ($_ => $_[0]{$_}) : () } @USER_PROP };
+}
+
+sub mode_string {
+    join '', map { $_[0]->{$_} ? $MODE_TABLE{$_} : () } sort keys @{$_[0]}{keys %MODE_TABLE};
 }
 
 
@@ -31,7 +69,7 @@ __END__
 
 =head1 NAME
 
-Uc::IrcGateway::User - User Object for Uc::IrcGateway
+Uc::IrcGateway::TempUser - Temporary User Object for Uc::IrcGateway
 
 
 =head1 DESCRIPTION

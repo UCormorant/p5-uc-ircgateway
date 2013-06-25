@@ -6,16 +6,15 @@ use utf8;
 
 use parent qw(AnyEvent::Handle);
 
-use Uc::IrcGateway::User;
+use Uc::IrcGateway::Structure;
 
 use Carp ();
 use Path::Class qw(file);
 use Scalar::Util qw(refaddr);
 
 use Class::Accessor::Lite (
-    rw => [qw(registered)],
+    rw => [qw(self)],
     ro => [ qw(
-        self
         ircd
         schema
 
@@ -29,10 +28,10 @@ sub new {
     my $class = shift;
     my %args = @_ == 1 ? %{$_[0]} : @_;
 
-    $class->SUPER::new(
-        self => Uc::IrcGateway::User->new(),
+    my $self = $class->SUPER::new(
+        self => undef,
         ircd => undef,
-        schema => {},
+        schema => Uc::IrcGateway::Structure->new( dbh => setup_dbh() ),
 
         options => {},
         users => {},
@@ -42,8 +41,28 @@ sub new {
 
         %args,
     );
+
+    $self->schema->setup_database;
+
+    $self;
 }
 
+sub create_user {
+    my $self = shift;
+    my %args = @_ == 1 ? %{$_[0]} : @_;
+    $self->schema->insert('user', \%args);
+}
+
+sub has_nick {
+    my ($self, $nick) = @_;
+    $self->schema->single('user', { nick => $nick }) ? 1 : 0;
+}
+
+sub lookup {
+    my ($self, $nick) = @_;
+    my $user = $self->schema->single('user', { nick => $nick });
+    $user ? $user->login : undef;
+}
 
 1; # Magic true value required at end of module
 __END__

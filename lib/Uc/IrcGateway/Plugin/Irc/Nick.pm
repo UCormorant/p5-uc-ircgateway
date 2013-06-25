@@ -27,25 +27,19 @@ sub action :IrcEvent('NICK') {
     if (defined $user && $user->nick) {
         # change nick
         $self->send_cmd( $handle, $user, $cmd, $nick );
-        $handle->del_lookup($user->nick);
         $user->nick($nick);
-        $handle->set_users($user);
+        $user->update;
     }
     elsif (defined $user) {
         # finish register user
         $user->nick($nick);
-        $user->registered(1);
+        $user->register($handle);
         $msg->{registered} = 1;
-        $handle->set_users($user);
         $self->welcome_message( $handle );
     }
     else {
         # start register user
-        $user = Uc::IrcGateway::User->new(
-            nick => $nick, login => '*', realname => '*',
-            host => '*', addr => '*', server => '*',
-        );
-        $handle->self($user);
+        $handle->self(Uc::IrcGateway::TempUser->new( nick => $nick ));
     }
 
     @_;
