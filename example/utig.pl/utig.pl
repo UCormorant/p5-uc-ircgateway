@@ -729,8 +729,14 @@ sub tid_event {
         $self->send_cmd( $handle, $self->daemon, 'NOTICE', $target, "$text [$tid]" );
     }
     else {
-        $api .= "/$tweet_id";
-        $self->api($handle, $api, cb => $cb);
+        my %params;
+        if ($event[0] eq 'favorites') {
+            $params{id} = $tweet_id;
+        }
+        else {
+            $api .= "/$tweet_id";
+        }
+        $self->api($handle, $api, cb => $cb, params => \%params);
     }
 }
 
@@ -1035,7 +1041,7 @@ sub join_channels {
     return () unless $self && $handle;
     $retry ||= 5 + 1;
 
-    $self->api($handle, 'lists/all', cb => sub {
+    $self->api($handle, 'lists/list', cb => sub {
         my ($header, $res, $reason) = @_;
 
         if (!$res && --$retry) {

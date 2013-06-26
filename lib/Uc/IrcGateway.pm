@@ -1,4 +1,4 @@
-package Uc::IrcGateway v2.1.1;
+package Uc::IrcGateway v2.1.2;
 
 use 5.014;
 use warnings;

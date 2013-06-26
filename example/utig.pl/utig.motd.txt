@@ -1,4 +1,6 @@
-Version 2.1.0
+Version 2.1.2
+
+Twitter API v1.1 対応
 
 Uc::IrcGateway 作りこみ計画
     ゲートウェイサーバ基底クラスとしての完成度上げたい
@@ -18,10 +20,8 @@ TODO:
     →→自分の発言はtopicなので流れない
     →→自分を含むリストにも一切流れない
     いずれなおす
-    ctcp_action と MySQL の連携 -> した
-    → retweet の取り消しできてない
-    → DBIx::Class でかいので Teng にした
     on_event と MySQL の連携
     Twitterアカウントのデータ更新
     utig.pl もうちょっと小さくしたい
     → 小さくするつもりが100行以上増えててワロタ
+    no Moose -> した
