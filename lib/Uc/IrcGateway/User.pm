@@ -1,4 +1,5 @@
 package Uc::IrcGateway::User;
+use 5.014;
 use parent 'Teng::Row';
 
 sub new {
@@ -7,8 +8,9 @@ sub new {
 }
 
 sub channels { # has_many
+    local $_;
     my $self = shift;
-    $self->{teng}->search('channel_user', { u_login => $self->login, @_ });
+    map { $_->c_name } $self->{teng}->search('channel_user', { u_login => $self->login, @_ });
 }
 
 sub operator_channles { # has_many

@@ -4,7 +4,7 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('WHO') {
-    my ($self, $handle, $msg) = check_params(@_);
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
     return () unless $self && $handle;
 
     my ($mask, $oper) = @{$msg->{params}};
@@ -26,10 +26,10 @@ sub action :IrcEvent('WHO') {
 
     if (scalar @channels) {
         for my $channel (@channels) {
-            my $c_name = $channel->mode->{p} ? '*' : $channel->name;
+            my $c_name = $channel->private ? '*' : $channel->name;
             for my $u ($handle->get_users($channel->login_list)) {
-                my $mode = $u->mode->{a} ? 'G' : 'H';
-                $mode .= "*" if $u->mode->{o}; # server operator
+                my $mode = $u->away ? 'G' : 'H';
+                $mode .= "*" if $u->operator; # server operator
                 $mode .= $channel->is_operator($u->login) ? '@' : $channel->is_speaker($u->login) ? '+' : '';
                 $self->send_msg( $handle, RPL_WHOREPLY, $c_name, $u->login, $u->host, $u->server, $u->nick, $mode, '0 '.$u->realname);
             }
@@ -39,8 +39,8 @@ sub action :IrcEvent('WHO') {
     else {
         my $u = $handle->get_users($mask);
         if ($u) {
-            my $mode = $u->mode->{a} ? 'G' : 'H';
-            $mode .= "*" if $u->mode->{o}; # server operator
+            my $mode = $u->away ? 'G' : 'H';
+            $mode .= "*" if $u->operator; # server operator
             $self->send_msg( $handle, RPL_WHOREPLY, '*', $u->login, $u->host, $u->server, $u->nick, $mode, '0 '.$u->realname);
         }
         $self->send_msg( $handle, RPL_ENDOFWHO, '*', 'END of /WHO List');

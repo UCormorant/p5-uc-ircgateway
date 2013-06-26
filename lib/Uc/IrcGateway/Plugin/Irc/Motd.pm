@@ -4,7 +4,9 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('MOTD') {
-    my ($self, $handle, $msg) = @_;
+    my ($self, $handle, $msg, $plugin) = @_;
+    return () unless $self && $handle;
+
     my $missing = 1;
     if (-e $self->motd) {
         my $fh = $self->motd->open("<:encoding(@{[$self->charset]})");

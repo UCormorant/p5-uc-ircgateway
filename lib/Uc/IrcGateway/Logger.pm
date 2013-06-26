@@ -63,13 +63,13 @@ sub debug {
     my ($self, $ircd, $handle, $tag, $message, $level) = @_;
     $message ||= "";
     $level   ||= 0;
-    carp sprintf "[%s] %s", $tag, $message if $level < $ircd->debug;
+    carp $ircd->err_codec->encode(sprintf "[%s] %s", $tag, $message) if $level < $ircd->debug;
 }
 
 sub warn {
     my ($self, $ircd, $handle, $tag, $message) = @_;
     $message ||= "";
-    carp sprintf "[%s] %s", $tag, $message;
+    carp $ircd->err_codec->encode(sprintf "[%s] %s", $tag, $message);
 }
 
 sub DESTROY {

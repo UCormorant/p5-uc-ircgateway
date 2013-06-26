@@ -47,10 +47,32 @@ sub new {
     $self;
 }
 
-sub create_user {
+sub set_user {
     my $self = shift;
     my %args = @_ == 1 ? %{$_[0]} : @_;
     $self->schema->insert('user', \%args);
+}
+
+sub get_users {
+    my $self = shift;
+    my $method = wantarray ? 'search' : 'single';
+    $self->schema->$method('user', { login => \@_ });
+}
+
+sub get_users_by_nicks {
+    my $self = shift;
+    my $method = wantarray ? 'search' : 'single';
+    $self->schema->$method('user', { nick => \@_ });
+}
+
+sub del_users {
+    my $self = shift;
+    $self->schema->delete('user', { login => \@_ });
+}
+
+sub has_user {
+    my ($self, $login) = @_;
+    $self->schema->single('user', { login => $login }) ? 1 : 0;
 }
 
 sub has_nick {
@@ -63,6 +85,54 @@ sub lookup {
     my $user = $self->schema->single('user', { nick => $nick });
     $user ? $user->login : undef;
 }
+
+sub user_list {
+    local $_;
+    my $self = shift;
+    map { $_->login } $self->schema->search('user');
+}
+
+sub nick_list {
+    local $_;
+    my $self = shift;
+    map { $_->nick } $self->schema->search('user');
+}
+
+sub set_channels {
+    local $_;
+    my $self = shift;
+    my @insert_multi = map { +{ name => $_ } } @_;
+    $self->schema->bulk_insert('channel', \@insert_multi);
+}
+
+sub get_channels {
+    my $self = shift;
+    my $method = wantarray ? 'search' : 'single';
+    $self->schema->$method('channel', { name => \@_ });
+}
+
+sub del_chnnels {
+    my $self = shift;
+    $self->schema->delete('channel', { name => \@_ });
+}
+
+sub has_channel {
+    my ($self, $c_name) = @_;
+    $self->schema->single('channel', { name => $c_name }) ? 1 : 0;
+}
+
+sub channel_list {
+    local $_;
+    my $self = shift;
+    map { $_->name } $self->schema->search('channel');
+}
+
+sub who_is_channels {
+    local $_;
+    my ($self, $login) = @_;
+    map { $_->c_name } $self->schema->search('channel_user', { u_login => $login });
+}
+
 
 1; # Magic true value required at end of module
 __END__

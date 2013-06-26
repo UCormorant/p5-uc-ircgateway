@@ -4,7 +4,9 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('INVITE') {
-    my ($self, $handle, $msg) = check_params(@_);
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
+    return () unless $self && $handle;
+
     my $cmd    = $msg->{command};
     my ($target, $channel) = @{$msg->{params}};
 
@@ -28,7 +30,7 @@ sub action :IrcEvent('INVITE') {
         }
     }
 
-    if ($t_user->mode->{a}) {
+    if ($t_user->away) {
         $self->send_msg( $handle, RPL_AWAY, $target, $t_user->away_message );
     }
 

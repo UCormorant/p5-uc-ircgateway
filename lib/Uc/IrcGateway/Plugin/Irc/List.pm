@@ -4,7 +4,9 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('LIST') {
-    my ($self, $handle, $msg) = @_;
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
+    return () unless $self && $handle;
+
     my $chans = $msg->{params}[0] || join ',', sort $handle->channel_list;
     my $server = $msg->{params}[1];
     my $nick = $handle->self->nick;

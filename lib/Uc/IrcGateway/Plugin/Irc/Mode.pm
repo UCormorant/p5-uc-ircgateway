@@ -4,7 +4,7 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('MODE') {
-    my ($self, $handle, $msg) = check_params(@_);
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
     return () unless $self && $handle;
 
     my $cmd = $msg->{command};
@@ -84,8 +84,17 @@ sub action :IrcEvent('MODE') {
     #     r - サーバreopチャンネルフラグをトグル
     #     t - トピック変更をチャンネルオペレータのみに限定するかをトグル
                     when ([qw/a i m n q p s r t/]) {
+                        my $method = $m eq 'a' ? 'anonymous'
+                                   : $m eq 'i' ? 'invite_only'
+                                   : $m eq 'm' ? 'moderate'
+                                   : $m eq 'n' ? 'no_message'
+                                   : $m eq 'q' ? 'quiet'
+                                   : $m eq 'p' ? 'private'
+                                   : $m eq 's' ? 'secret'
+                                   : $m eq 'r' ? 'reop'
+                                   :             'op_topic_only';
                         $oper ||= '+';
-                        $chan->mode->{$m} = $oper eq '-' ? 0 : 1;
+                        $chan->$method($oper eq '-' ? 0 : 1);
                         $mode_string  ||= $oper; $mode_string .= $m;
                     }
     #

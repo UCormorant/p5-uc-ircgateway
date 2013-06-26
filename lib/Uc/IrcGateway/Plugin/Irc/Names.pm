@@ -4,7 +4,9 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('NAMES') {
-    my ($self, $handle, $msg) = @_;
+    my ($self, $handle, $msg, $plugin) = @_;
+    return () unless $self && $handle;
+
     my $chans = $msg->{params}[0] || join ',', sort $handle->channel_list;
     my $server = $msg->{params}[1];
 
@@ -18,7 +20,7 @@ sub action :IrcEvent('NAMES') {
         next unless $self->check_channel( $handle, $chan, enable => 1 );
 
         my $c = $handle->get_channels($chan);
-        my $c_mode = $c->mode->{s} ? '@' : $c->mode->{p} ? '*' : '=';
+        my $c_mode = $c->secret ? '@' : $c->private ? '*' : '=';
         my $m_chan = $c_mode.' '.$chan;
 
         my $users = '';

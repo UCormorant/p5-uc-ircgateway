@@ -4,7 +4,7 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('PART') {
-    my ($self, $handle, $msg) = check_params(@_);
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
     return () unless $self && $handle;
 
     my ($chans, $text) = @{$msg->{params}};

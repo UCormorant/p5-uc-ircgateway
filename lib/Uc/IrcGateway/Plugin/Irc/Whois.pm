@@ -4,7 +4,7 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('WHOIS') {
-    my ($self, $handle, $msg) = check_params(@_);
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
     return () unless $self && $handle;
 
     my @nick_list = map { $self->check_user($handle, $_) ? $_ : () } split /,/, $msg->{params}[0];
@@ -26,10 +26,10 @@ sub action :IrcEvent('WHOIS') {
         }
         push @channel_list, $channels if chop $channels;
 
-        $self->send_msg( $handle, RPL_AWAY, $user->nick, $user->away_message ) if $user->mode->{a};
+        $self->send_msg( $handle, RPL_AWAY, $user->nick, $user->away_message ) if $user->away;
         $self->send_msg( $handle, RPL_WHOISUSER, $user->nick, $user->login, $user->host, '*', $user->realname );
         $self->send_msg( $handle, RPL_WHOISSERVER, $user->nick, $user->server, $user->server );
-        $self->send_msg( $handle, RPL_WHOISOPERATOR, $user->nick, 'is an IRC operator' ) if $user->mode->{o};
+        $self->send_msg( $handle, RPL_WHOISOPERATOR, $user->nick, 'is an IRC operator' ) if $user->operator;
         $self->send_msg( $handle, RPL_WHOISIDLE, $user->nick, time - $user->last_modified, 'seconds idle' );
         $self->send_msg( $handle, RPL_WHOISCHANNELS, $user->nick, $_ ) for @channel_list;
         $self->send_msg( $handle, RPL_ENDOFWHOIS, $user->nick, 'End of /WHOIS list' );

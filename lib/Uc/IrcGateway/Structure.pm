@@ -44,7 +44,7 @@ CREATE TABLE 'channel' (
   'no_message'    boolean NOT NULL DEFAULT 0,
   'quiet'         boolean NOT NULL DEFAULT 0,
   'private'       boolean NOT NULL DEFAULT 0,
-  'secret '       boolean NOT NULL DEFAULT 0,
+  'secret'        boolean NOT NULL DEFAULT 0,
   'reop'          boolean NOT NULL DEFAULT 0,
   'op_topic_only' boolean NOT NULL DEFAULT 0,
 
@@ -152,6 +152,7 @@ table {
         { name => "reop",          type => SQL_BOOLEAN },
         { name => "op_topic_only", type => SQL_BOOLEAN },
     );
+    row_class "Uc::IrcGateway::Channel";
 };
 
 table {
@@ -190,46 +191,22 @@ table {
 };
 
 
-package Uc::IrcGateway::Structure::Row::Channel;
-use parent qw(Teng::Row Uc::IrcGateway::Channel);
-
-sub new {
-    my $class = shift;
-    $class->SUPER::new(@_);
-}
-
-sub users { # has_many
-    my $self = shift;
-    $self->{teng}->search('channel_user', { c_name => $self->name, @_ });
-}
-
-sub operators { # has_many
-    my $self = shift;
-    $self->users( operator => 1, @_ );
-}
-
-sub speakers { # has_many
-    my $self = shift;
-    $self->users( speaker => 1, @_ );
-}
-
-
 package Uc::IrcGateway::Structure::Row::ChannelUser;
 use parent 'Teng::Row';
 
 sub channel { # blongs_to
     my $self = shift;
-    $self->handle->single('channel', { name => $self->c_name, @_ });
+    $self->{teng}->single('channel', { name => $self->c_name, @_ });
 }
 
 sub users { # has_many
     my $self = shift;
-    $self->handle->search('user', { login => $self->u_login, @_ });
+    $self->{teng}->search('user', { login => $self->u_login, @_ });
 }
 
 sub user { # blongs_to
     my $self = shift;
-    $self->handle->single('user', { login => $self->u_login, @_ });
+    $self->{teng}->single('user', { login => $self->u_login, @_ });
 }
 
 

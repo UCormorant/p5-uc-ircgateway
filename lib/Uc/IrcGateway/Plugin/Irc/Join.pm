@@ -15,9 +15,9 @@ sub action :IrcEvent('JOIN') {
         next unless $self->check_channel( $handle, $chan );
         next if     $self->check_channel( $handle, $chan, joined => 1, silent => 1 );
 
-        $handle->set_channels($chan => Uc::IrcGateway::Channel->new(name => $chan) ) if not $handle->has_channel($chan);
-        $handle->get_channels($chan)->join_users($login => $nick);
-        $handle->get_channels($chan)->give_operator($login => $nick);
+        $handle->set_channels($chan) if not $handle->has_channel($chan);
+        $handle->get_channels($chan)->join_users($login);
+        $handle->get_channels($chan)->give_operator($login);
 
         # send join message
         $self->send_cmd( $handle, $handle->self, 'JOIN', $chan );

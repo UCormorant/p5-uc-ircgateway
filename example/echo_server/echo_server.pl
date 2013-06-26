@@ -1,38 +1,13 @@
 #!/usr/local/bin/perl
 
-package EchoServer;
-
 use 5.014;
 use common::sense;
 use warnings qw(utf8);
+use lib qw(lib ../../lib);
+use EchoServer;
 
-use lib qw(../lib);
-use parent 'Uc::IrcGateway';
-
-#extends 'Uc::IrcGateway';
-#override '_event_irc_privmsg' => sub {
-#    my ($self, $handle, $msg) = super();
-#    return unless $self;
-#
-#    my ($msgtarget, $text) = @{$msg->{params}};
-#
-#    for my $target (@{$msg->{success}}) {
-#        # send privmsg message to yourself
-#        $self->send_cmd( $handle, $handle->self, 'PRIVMSG', $target, $text );
-#    }
-#
-#    @_;
-#};
-
-
-package main;
-
-use 5.014;
-use common::sense;
-use warnings qw(utf8);
-
-use Readonly;
-Readonly my $CHARSET => ($^O eq 'MSWin32' ? 'cp932' : 'utf8');
+use Data::Lock qw(dlock);
+dlock my $CHARSET = ($^O eq 'MSWin32' ? 'cp932' : 'utf8');
 binmode STDIN  => ":encoding($CHARSET)";
 binmode STDOUT => ":encoding($CHARSET)";
 

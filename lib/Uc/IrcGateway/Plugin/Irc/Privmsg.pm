@@ -4,7 +4,7 @@ use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
 sub action :IrcEvent('PRIVMSG') {
-    my ($self, $handle, $msg) = check_params(@_);
+    my ($self, $handle, $msg, $plugin) = check_params(@_);
     return () unless $self && $handle;
 
     my $cmd    = $msg->{command};
@@ -40,7 +40,7 @@ sub action :IrcEvent('PRIVMSG') {
         }
         else {
             my $user = $handle->get_users_by_nicks($target);
-            $self->send_msg( $handle, RPL_AWAY, $target, $user->away_message ) if ref $user and $user->mode->{a};
+            $self->send_msg( $handle, RPL_AWAY, $target, $user->away_message ) if ref $user and $user->away;
         }
 
         # ctcp event

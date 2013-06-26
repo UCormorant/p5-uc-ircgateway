@@ -46,7 +46,7 @@ sub register {
     croak "user registration error: nick is not defined"  if not $self->nick;
     croak "user registration error: login is not defined" if not $self->login;
 
-    my $user = $handle->schema->insert('user', $self->user_prop);
+    my $user = $handle->set_user($self->user_prop);
     $handle->self($user);
     $user;
 }
