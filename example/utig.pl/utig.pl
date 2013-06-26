@@ -50,7 +50,7 @@ use lib qw(../../lib);
 use Any::Moose;
 use Uc::IrcGateway;
 use Uc::Model::Twitter;
-use Net::Twitter::Lite;
+use Net::Twitter::Lite::WithAPIv1_1;
 use AnyEvent::Twitter;
 use AnyEvent::Twitter::Stream;
 use HTML::Entities qw(decode_entities);
@@ -1167,7 +1167,7 @@ sub twitter_agent {
 
     my ($conf_app, $conf_user) = @{$handle}{qw/conf_app conf_user/};
     if (ref $handle->{nt} ne 'Net::Twitter::Lite') {
-        $handle->{nt} = Net::Twitter::Lite->new(%$conf_app, legacy_lists_api => 1);
+        $handle->{nt} = Net::Twitter::Lite::WithAPIv1_1->new(%$conf_app, legacy_lists_api => 1);
     }
 
     my $nt = $handle->{nt};
@@ -1183,7 +1183,7 @@ sub twitter_agent {
             $self->send_msg( $handle, ERR_YOUREBANNEDCREEP, "twitter authorization error: $@" );
         }
     }
-    if ($nt->{authorized} = eval { $nt->account_totals; }) {
+    if ($nt->{authorized} = eval { $nt->account_settings; }) {
         my ($authorized, $config_updated) = @{$nt}{qw/authorized config_updated/};
         $handle->{nt} = AnyEvent::Twitter->new(
             consumer_key    => $handle->{conf_app}{consumer_key},
