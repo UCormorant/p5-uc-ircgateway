@@ -3,22 +3,46 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('PRIVMSG') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
 
-    my $cmd    = $msg->{command};
-    my $prefix = $msg->{prefix} || $handle->self->to_prefix;
-    my ($msgtarget, $text) = @{$msg->{params}};
-    my ($plain_text, $ctcp) = decode_ctcp($text);
-    my $silent = $cmd eq 'NOTICE' ? 1 : 0;
+sub event :IrcEvent('PRIVMSG') {
+    my $self = shift;
+    $self->run_hook('irc.privmsg.begin' => \@_);
 
-    if (not defined $text) {
-        $self->send_msg( $handle, ERR_NOTEXTTOSEND, 'No text to send' ) unless $silent;
-        return ();
+        action($self, @_);
+
+    $self->run_hook('irc.privmsg.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    my $notice = $msg->{command} eq 'NOTICE' ? 1 : 0;
+
+    $notice ? $self->run_hook('irc.notice.start'  => \@_)
+            : $self->run_hook('irc.privmsg.start' => \@_);
+
+    # set plain text and ctcp
+    @{$msg}{qw/plain_text ctcp/} = decode_ctcp($msg->{params}[1]);
+
+    if (not defined $msg->{params}[1]) {
+        $msg->{response} = {};
+        $self->send_reply( $handle, $msg, 'ERR_NOTEXTTOSEND' ) unless $notice;
+        return;
     }
 
-    for my $target (split /,/, $msgtarget) {
+    for my $target (split /,/, $msg->{params}[0]) {
+        $msg->{response} = {};
+        $msg->{response}{target} = $target;
+        $msg->{response}{prefix} = $msg->{prefix} || $handle->self->to_prefix;
+        $msg->{response}{text}   = $msg->{plain_text};
+
         # TODO: error
         if (0) { # WILD CARD
             if (0) { # check wild card
@@ -34,33 +58,39 @@ sub action :IrcEvent('PRIVMSG') {
                 # ERR_CANNOTSENDTOCHAN <channel name> :Cannot send to channel
                 next;
             }
+            $msg->{response}{target_is_channel} = 1;
         }
-        elsif (not $self->check_user($handle, $target, silent => $silent)) {
+        elsif (not $self->check_user($handle, $target, silent => $notice)) {
             next;
         }
         else {
             my $user = $handle->get_users_by_nicks($target);
-            $self->send_msg( $handle, RPL_AWAY, $target, $user->away_message ) if ref $user and $user->away;
+            $msg->{response}{away_message} = $user->away_message;
+            $self->send_reply( $handle, $msg, 'RPL_AWAY' ) if $user->away;
+            $msg->{response}{target_is_user} = 1;
         }
 
         # ctcp event
-        if (scalar @$ctcp) {
-            for my $event (@$ctcp) {
+        if (scalar @{$msg->{ctcp}}) {
+            for my $event (@{$msg->{ctcp}}) {
                 my ($ctcp_text, $ctcp_args) = @{$event};
                 $ctcp_text .= " $ctcp_args" if $ctcp_args;
                 $self->handle_ctcp_msg( $handle, $ctcp_text,
-                        prefix => $prefix, target => $target, orig_command => $cmd, silent => $silent );
+                    prefix => $msg->{response}{prefix},
+                    target => $msg->{response}{target},
+                    orig_command => $msg->{commnad},
+                    silent => $notice,
+                );
             }
         }
 
         # push target for override method
-        push @{$msg->{success}}, $target;
+        push @{$msg->{success}}, $msg->{response};
     }
 
-    # push plain text and ctcp
-    push @{$msg->{params}}, $plain_text, $ctcp;
+    $notice ? $self->run_hook('irc.notice.finish'  => \@_)
+            : $self->run_hook('irc.privmsg.finish' => \@_);
 
-    @_;
 }
 
 1;

@@ -3,44 +3,66 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('INVITE') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
 
-    my $cmd    = $msg->{command};
-    my ($target, $channel) = @{$msg->{params}};
+sub event :IrcEvent('INVITE') {
+    my $self = shift;
+    $self->run_hook('irc.invite.begin' => \@_);
 
-    return () unless $self->check_user($handle, $target);
+        action($self, @_);
 
-    my $t_user = $handle->get_users_by_nicks($target);
+    $self->run_hook('irc.invite.end' => \@_);
+}
 
-    if ($self->check_channel($handle, $channel, enable => 1, silent => 1)) {
-        my $chan = $handle->get_channels($channel);
-        if (not $chan->has_user($handle->self->login)) {
-            $self->send_msg( $handle, ERR_NOTONCHANNEL, $channel, "You're not on that channel" );
-            return ();
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.invite.start' => \@_);
+
+    return unless $self->check_user($handle, $msg->{params}[0]);
+
+    $msg->{response} //= {};
+    $msg->{response}{nick}    = $msg->{params}[0];
+    $msg->{response}{channel} = $msg->{params}[1];
+    $msg->{response}{target_user} = $handle->get_users_by_nicks($msg->{response}{nick});
+
+    if ($self->check_channel($handle, $msg->{response}{channel}, enable => 1, silent => 1)) {
+        $msg->{response}{target_channel} = $handle->get_channels($msg->{response}{channel});
+        if (not $msg->{response}{target_channel}->has_user($handle->self->login)) {
+            $self->send_reply( $handle, $msg, 'ERR_NOTONCHANNEL' );
+            return;
         }
-        if ($chan->has_user($t_user->login)) {
-            $self->send_msg( $handle, ERR_USERONCHANNEL, $target, $channel, 'is already on channel' );
-            return ();
+        if ($msg->{response}{target_channel}->has_user($msg->{response}{target_user}->login)) {
+            $self->send_reply( $handle, $msg, 'ERR_USERONCHANNEL' );
+            return;
         }
-        if (not $chan->is_operator($handle->self->login)) {
-            $self->send_msg( $handle, ERR_CHANOPRIVSNEEDED, $channel, "You're not channel operator" );
-            return ();
+        if (not $msg->{response}{target_channel}->is_operator($handle->self->login)) {
+            $self->send_reply( $handle, $msg, 'ERR_CHANOPRIVSNEEDED' );
+            return;
         }
     }
 
-    if ($t_user->away) {
-        $self->send_msg( $handle, RPL_AWAY, $target, $t_user->away_message );
+    if ($msg->{response}{target_user}->away) {
+        $msg->{response}{away_message} = $msg->{response}{target_user}->away_message;
+        $self->run_hook('irc.invite.before_reply_away' => \@_);
+        $self->send_reply( $handle, $msg, 'RPL_AWAY' );
     }
 
     # send invite message
-    $self->send_cmd( $handle, $handle->self, 'INVITE', $target, $channel );
+    $self->run_hook('irc.invite.before_command' => \@_);
+    $self->send_cmd( $handle, $handle->self, 'INVITE', @{$msg->{response}}{qw/nick channel/} );
 
     # send server reply
-    $self->send_cmd( $handle, $handle->self, RPL_INVITING, $channel, $target );
+    $self->run_hook('irc.invite.before_reply' => \@_);
+    $self->send_reply( $handle, $msg, 'RPL_INVITING' );
 
-    @_;
+    $self->run_hook('irc.invite.finish' => \@_);
 }
 
 1;

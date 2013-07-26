@@ -3,9 +3,27 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('WHOIS') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
+
+sub event :IrcEvent('WHOIS') {
+    my $self = shift;
+    $self->run_hook('irc.whois.begin' => \@_);
+
+        action($self, @_);
+
+    $self->run_hook('irc.whois.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.whois.start' => \@_);
 
     my @nick_list = map { $self->check_user($handle, $_) ? $_ : () } split /,/, $msg->{params}[0];
 
@@ -35,7 +53,7 @@ sub action :IrcEvent('WHOIS') {
         $self->send_msg( $handle, RPL_ENDOFWHOIS, $user->nick, 'End of /WHOIS list' );
     }
 
-    @_;
+    $self->run_hook('irc.whois.finish' => \@_);
 }
 
 1;

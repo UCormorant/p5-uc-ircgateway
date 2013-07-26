@@ -2,65 +2,21 @@ package Uc::IrcGateway::Plugin::Irc::Notice;
 use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
+use Uc::IrcGateway::Plugin::Irc::Privmsg;
 
-sub action :IrcEvent('NOTICE') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
 
-    my $cmd    = $msg->{command};
-    my $prefix = $msg->{prefix} || $handle->self->to_prefix;
-    my ($msgtarget, $text) = @{$msg->{params}};
-    my ($plain_text, $ctcp) = decode_ctcp($text);
-    my $silent = $cmd eq 'NOTICE' ? 1 : 0;
+sub event :IrcEvent('NOTICE') {
+    my $self = shift;
+    $self->run_hook('irc.notice.begin' => \@_);
 
-    if (not defined $text) {
-        $self->send_msg( $handle, ERR_NOTEXTTOSEND, 'No text to send' ) unless $silent;
-        return ();
-    }
+        Uc::IrcGateway::Plugin::Irc::Privmsg::action($self, @_);
 
-    for my $target (split /,/, $msgtarget) {
-        # TODO: error
-        if (0) { # WILD CARD
-            if (0) { # check wild card
-                # ERR_NOTOPLEVEL <mask> :No toplevel domain specified
-                # ERR_WILDTOPLEVEL <mask> <mask> :Wildcard in toplevel domain
-                # ERR_TOOMANYTARGETS <target> :<error code> recipients. <abort message>
-                # ERR_NORECIPIENT :No recipient given (<command>)
-                next;
-            }
-        }
-        elsif (is_valid_channel_name($target)) {
-            if (0) { # check mode
-                # ERR_CANNOTSENDTOCHAN <channel name> :Cannot send to channel
-                next;
-            }
-        }
-        elsif (not $self->check_user($handle, $target, silent => $silent)) {
-            next;
-        }
-        else {
-            my $user = $handle->get_users_by_nicks($target);
-            $self->send_msg( $handle, RPL_AWAY, $target, $user->away_message ) if ref $user and $user->away;
-        }
-
-        # ctcp event
-        if (scalar @$ctcp) {
-            for my $event (@$ctcp) {
-                my ($ctcp_text, $ctcp_args) = @{$event};
-                $ctcp_text .= " $ctcp_args" if $ctcp_args;
-                $self->handle_ctcp_msg( $handle, $ctcp_text,
-                        prefix => $prefix, target => $target, orig_command => $cmd, silent => $silent );
-            }
-        }
-
-        # push target for override method
-        push @{$msg->{success}}, $target;
-    }
-
-    # push plain text and ctcp
-    push @{$msg->{params}}, $plain_text, $ctcp;
-
-    @_;
+    $self->run_hook('irc.notice.end' => \@_);
 }
 
 1;

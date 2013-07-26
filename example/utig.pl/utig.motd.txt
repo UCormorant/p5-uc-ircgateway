@@ -1,6 +1,6 @@
-Version 2.1.1
+Version 3.0.0
 
-Twitter API 1.1 対応
+use Class::Component
 
 Uc::IrcGateway 作りこみ計画
     ゲートウェイサーバ基底クラスとしての完成度上げたい
@@ -10,8 +10,8 @@ Uc::IrcGateway 作りこみ計画
         タイマーイベント
         ログ
         テスト
-    各種コマンド対応
-        残: pass, invite, kick, mode
+    各種コマンド完成
+        残: pass, kick, mode, names, ping, pong, privmsg, user, who, whois
     設定を gatewaybot と対話で出来るようにしてはどうか
 
 TODO:
@@ -22,8 +22,5 @@ TODO:
     いずれなおす
     ctcp_action と MySQL の連携 -> した
     → retweet の取り消しできてない
-    → DBIx::Class でかいので Teng にした
     on_event と MySQL の連携
     Twitterアカウントのデータ更新
-    utig.pl もうちょっと小さくしたい
-    → 小さくするつもりが100行以上増えててワロタ

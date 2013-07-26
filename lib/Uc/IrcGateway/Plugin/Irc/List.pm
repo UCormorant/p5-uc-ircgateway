@@ -3,30 +3,59 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('LIST') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 0;
+    $config->{send_liststart} //= 0;
+}
+
+sub event :IrcEvent('LIST') {
+    my $self = shift;
+    $self->run_hook('irc.list.begin' => \@_);
+
+        action($self, @_);
+
+    $self->run_hook('irc.list.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.list.start' => \@_);
+
+    if ($msg->{params}[1]) {
+        # サーバマスク指定は対応予定なし
+        $msg->{response} = {};
+        $msg->{response}{server} = $msg->{params}[1];
+
+        $self->send_reply( $handle, $msg, 'ERR_NOSUCHSERVER' );
+        return;
+    }
+
+    if ($plugin->config->{send_liststart}) {
+        # too old message spec
+        $msg->{response} = {};
+        $msg->{response}{nick} = $handle->self->nick;
+        $self->send_reply( $handle, $msg, 'RPL_LISTSTART' );
+    }
 
     my $chans = $msg->{params}[0] || join ',', sort $handle->channel_list;
-    my $server = $msg->{params}[1];
-    my $nick = $handle->self->nick;
-
-    if ($server) {
-        # サーバマスク指定は対応予定なし
-        $self->send_msg( $handle, ERR_NOSUCHSERVER, $server, 'No such server' );
-        return ();
-    }
-
-    # too old message spec
-    #$self->send_msg( $handle, RPL_LISTSTART, $nick, 'Channel', 'Users Name' );
     for my $channel ($handle->get_channels(split /,/, $chans)) {
         next unless $channel;
-        my $member_count = scalar $channel->login_list;
-        $self->send_msg( $handle, RPL_LIST, $channel->name, $member_count, $channel->topic );
-    }
-    $self->send_msg( $handle, RPL_LISTEND, 'END of /List' );
+        $msg->{response} = {};
+        $msg->{response}{channel} = $channel->name;
+        $msg->{response}{topic}   = $channel->topic;
+        $msg->{response}{member_count} = scalar $channel->login_list;
+        $self->send_reply( $handle, $msg,  'RPL_LIST' );
 
-    @_;
+        push @{$msg->{success}}, $msg->{response};
+    }
+    $self->send_reply( $handle, $msg, 'RPL_LISTEND' );
+
+    $self->run_hook('irc.list.finish' => \@_);
 }
 
 1;

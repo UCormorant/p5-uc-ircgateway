@@ -3,18 +3,40 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('ISON') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
+
+sub event :IrcEvent('ISON') {
+    my $self = shift;
+    $self->run_hook('irc.invite.begin' => \@_);
+
+        action($self, @_);
+
+    $self->run_hook('irc.invite.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.ison.start' => \@_);
 
     my @users;
     for my $nick (@{$msg->{params}}) {
         push @users, $nick if $handle->has_user($nick);
     }
 
-    $self->send_msg( $handle, RPL_ISON, join ' ', @users );
+    # TODO: inflated_sprintf format
+    $msg->{response}{nick} = join ", ", @users;
 
-    @_;
+    $self->run_hook('irc.ison.before_reply' => \@_);
+    $self->send_reply( $handle, $msg, 'RPL_ISON' );
+
+    $self->run_hook('irc.ison.finish' => \@_);
 }
 
 1;

@@ -3,28 +3,49 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('TOPIC') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
 
-    my ($chan, $topic) = @{$msg->{params}};
-    return () unless $self->check_channel( $handle, $chan, enable => 1 );
+sub event :IrcEvent('TOPIC') {
+    my $self = shift;
+    $self->run_hook('irc.topic.begin' => \@_);
 
-    if ($topic) {
-        $handle->get_channels($chan)->topic( $topic );
+        action($self, @_);
+
+    $self->run_hook('irc.topic.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.topic.start' => \@_);
+
+    $msg->{response} = {};
+    $msg->{response}{channel} = $msg->{params}[0];
+    $msg->{response}{prefix}  = $msg->{prefix} || $handle->self->to_prefix;
+
+    return unless $self->check_channel( $handle, $msg->{response}{channel}, enable => 1 );
+
+    if ($msg->{params}[1]) {
+        $msg->{response}{topic} = $handle->get_channels($msg->{response}{channel})->topic( $msg->{params}[1] );
 
         # send topic message
-        my $prefix = $msg->{prefix} || $handle->self;
-        $self->send_cmd( $handle, $prefix, 'TOPIC', $chan, $topic );
+        $self->send_cmd( $handle, $msg->{response}{prefix}, 'TOPIC', @{$msg->{response}}{qw/channel topic/} );
     }
-    elsif (defined $topic) {
-        $self->send_msg( $handle, RPL_NOTOPIC, $chan, 'No topic is set' );
+    elsif (defined $msg->{params}[1]) {
+        $self->send_reply( $handle, $msg, 'RPL_NOTOPIC' );
     }
     else {
-        $self->send_msg( $handle, RPL_TOPIC, $chan, $handle->get_channels($chan)->topic );
+        $msg->{response}{topic} = $handle->get_channels($msg->{response}{channel})->topic;
+        $self->send_reply( $handle, $msg, 'RPL_TOPIC' );
     }
 
-    @_;
+    $self->run_hook('irc.topic.finish' => \@_);
 }
 
 1;

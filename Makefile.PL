@@ -36,13 +36,12 @@ auto_set_repository;
 test_requires 'Test::More' => '0.94'; # for subtest
 test_requires 'Test::TCP';
 test_requires 'Test::Difflet';
+test_requires 'Test::Base::Less';
 
-requires 'Mouse' => '1.04';
-requires 'Any::Moose' => '0.11'; # for ::Util::TypeConstraints
 requires 'AnyEvent' => '7.04';
 requires 'AnyEvent::IRC' => '0.6'; # for is_nick_prefix, join_prefix
 requires 'Path::Class' => '0.29';
-requires 'UNIVERSAL::which' => '0.06';
+requires 'Text::InflateSprintf' => '0.01';
 
 # utig.pl
 requires 'Uc::Model::Twitter' => '1.00';

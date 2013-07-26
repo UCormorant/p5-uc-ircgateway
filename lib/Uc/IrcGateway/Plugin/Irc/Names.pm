@@ -3,9 +3,27 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('NAMES') {
-    my ($self, $handle, $msg, $plugin) = @_;
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 0;
+}
+
+sub event :IrcEvent('NAMES') {
+    my $self = shift;
+    $self->run_hook('irc.names.begin' => \@_);
+
+        action($self, @_);
+
+    $self->run_hook('irc.names.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.names.start' => \@_);
 
     my $chans = $msg->{params}[0] || join ',', sort $handle->channel_list;
     my $server = $msg->{params}[1];
@@ -44,7 +62,7 @@ sub action :IrcEvent('NAMES') {
         $self->send_msg( $handle, RPL_ENDOFNAMES, $chan, 'End of /NAMES list' );
     }
 
-    @_;
+    $self->run_hook('irc.names.finish' => \@_);
 }
 
 1;

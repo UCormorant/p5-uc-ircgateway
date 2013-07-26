@@ -3,7 +3,40 @@
 use 5.014;
 use common::sense;
 use warnings qw(utf8);
-use lib qw(lib ../../lib);
+use lib qw(../../lib);
+
+package EchoServer {
+    no thanks;
+
+    our $VERSION = Uc::IrcGateway->VERSION;
+
+    use common::sense;
+    use warnings qw(utf8);
+
+    use parent 'Uc::IrcGateway';
+    __PACKAGE__->load_plugins(qw/DefaultSet Echo/);
+}
+
+package EchoServer::Plugin::Echo {
+    no thanks;
+
+    use parent 'Class::Component::Plugin';
+    use Uc::IrcGateway::Common;
+    use Data::Dumper;
+
+    sub echo :Hook('irc.privmsg.finish') {
+        my ($hook, $self, $args) = @_;
+        my ($handle, $msg, $plugin) = @$args;
+
+        for my $res (@{$msg->{success}}) {
+            # send privmsg message to yourself
+            my $sender = $res->{target_is_user} ? $res->{target} : $handle->self->nick;
+            my $target = $res->{target_is_user} ? $handle->self->nick : $res->{target};
+            $self->send_cmd( $handle, $sender, 'PRIVMSG', $target, $res->{text} );
+        }
+    }
+}
+
 use EchoServer;
 
 use Data::Lock qw(dlock);
@@ -27,7 +60,6 @@ _HELP_
 my $ircd = EchoServer->new(
     host => $host,
     port => $port,
-    time_zone => 'Asia/Tokyo',
     debug => $debug,
 );
 

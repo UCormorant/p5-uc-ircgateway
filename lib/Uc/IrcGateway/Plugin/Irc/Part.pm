@@ -3,26 +3,41 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('PART') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
 
-    my ($chans, $text) = @{$msg->{params}};
-    my $login = $handle->self->login;
+sub event :IrcEvent('PART') {
+    my $self = shift;
+    $self->run_hook('irc.part.begin' => \@_);
 
-    for my $chan (split /,/, $chans) {
-        next unless $self->check_channel( $handle, $chan, joined => 1 );
+        action($self, @_);
 
-        $handle->get_channels($chan)->part_users($login);
+    $self->run_hook('irc.part.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.part.start' => \@_);
+
+    for my $channel (split /,/, $msg->{params}[0]) {
+        next unless $self->check_channel( $handle, $channel, joined => 1 );
+
+        $handle->get_channels($channel)->part_users($handle->self->login);
 
         # send part message
-        $self->send_cmd( $handle, $handle->self, 'PART', $chan, $text );
+        $self->send_cmd( $handle, $handle->self, 'PART', $channel, $msg->{params}[1] );
 
-        delete $handle->channels->{$chan} if !$handle->get_channels($chan)->user_count;
-        push @{$msg->{success}}, $chan;
+        delete $handle->channels->{$channel} if !$handle->get_channels($channel)->user_count;
+        push @{$msg->{success}}, $channel;
     }
 
-    @_;
+    $self->run_hook('irc.part.finish' => \@_);
 }
 
 1;

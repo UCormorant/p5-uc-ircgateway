@@ -4,8 +4,11 @@ use warnings;
 use utf8;
 use parent 'Exporter';
 
+use Scalar::Util qw(blessed);
+
 use Uc::IrcGateway::Connection;
 use Uc::IrcGateway::Logger;
+use Uc::IrcGateway::Message;
 use Uc::IrcGateway::TempUser;
 use Uc::IrcGateway::User;
 
@@ -43,7 +46,6 @@ our @EXPORT = qw(
     $SPCRLFCL
     %REGEX
 
-    check_params
     is_valid_channel_name
     opt_parser
     decorate_text
@@ -57,21 +59,7 @@ push @EXPORT, values %AnyEvent::IRC::Util::RFC_NUMCODE_MAP;
 sub import {
     utf8->import;
     warnings->import;
-    __PACKAGE__->export_to_level(1, @_)
-}
-
-sub check_params {
-    my ($self, $handle, $msg) = @_;
-    return () unless $self && $handle;
-    my $cmd   = $msg->{command};
-    my $param = $msg->{params}[0];
-
-    unless ($param) {
-        $self->need_more_params($handle, $cmd);
-        return ();
-    }
-
-    @_;
+    __PACKAGE__->export_to_level(1, @_);
 }
 
 sub is_valid_channel_name { $_[0] =~ /$REGEX{channel}/; }

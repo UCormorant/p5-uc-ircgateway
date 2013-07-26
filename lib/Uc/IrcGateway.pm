@@ -6,12 +6,12 @@ use Uc::IrcGateway::Common;
 use AnyEvent::Socket qw(tcp_server);
 use Carp qw(carp croak);
 use Encode qw(find_encoding);
-use Path::Class qw(file);
+use Path::Class qw(file dir);
 use Sys::Hostname qw(hostname);
-use Scalar::Util qw(refaddr);
+use Scalar::Util qw(blessed refaddr);
+use Text::InflatedSprintf qw(inflated_sprintf);
 use IO::Socket::INET ();
-use YAML::XS ();
-use JSON::XS ();
+use JSON ();
 
 use Class::Accessor::Lite (
     rw => [qw(
@@ -21,14 +21,17 @@ use Class::Accessor::Lite (
         gatewayname
 
         motd
+        app_dir
         ping_timeout
-        welcome_message
     )],
     ro => [qw(
+        condvar
+
         host
         port
         daemon
         ctime
+        message_set
 
         handles
     )],
@@ -53,42 +56,64 @@ sub new {
 
     # TODO: オプションの値チェック
 
-    $self->{debug}           //= 0;
-    $self->{host}            //= '127.0.0.1';
-    $self->{port}            //= 6667;
-    $self->{time_zone}       //= 'local';
-    $self->{servername}      //= scalar hostname();
-    $self->{gatewayname}     //= '*ucircd';
-    $self->{ping_timeout}    //= 30;
-    $self->{charset}         //= 'utf8';
-    $self->{err_charset}     //= $^O eq 'MSWin32' ? 'cp932' : 'utf8';
-    $self->{welcome_message} //= 'Welcome!';
+    $self->{debug}        //= 0;
+    $self->{host}         //= '127.0.0.1';
+    $self->{port}         //= 6667;
+    $self->{time_zone}    //= 'local';
+    $self->{servername}   //= scalar hostname();
+    $self->{gatewayname}  //= '*ucircd';
+    $self->{ping_timeout} //= 30;
+    $self->{charset}      //= 'utf8';
+    $self->{err_charset}  //= $^O eq 'MSWin32' ? 'cp932' : 'utf8';
+
+    $self->{message_set}  //= {};
 
     $self->{codec}     = find_encoding($self->charset);
     $self->{err_codec} = find_encoding($self->err_charset);
 
-    $self->{motd}      = file($self->{motd} || $0 =~ s/(.*)\.\w+$/$1.motd.txt/r);
     $self->{daemon}    = Uc::IrcGateway::TempUser->new(nick => $self->gatewayname, login => '*', host => $self->host);
     $self->{codec}     = find_encoding($self->charset);
     $self->{err_codec} = find_encoding($self->err_charset);
 
-    $self->{handles} = {};
+    $self->{app_dir}   = $self->{app_dir} ? dir($self->{app_dir}) : $self->default_app_dir();
+    $self->{app_dir}->mkpath if not -e $self->{app_dir};
+    $self->{motd}      = file($self->app_dir, ($self->{motd} || file($0)->basename =~ s/(.*)\.\w+$/$1.motd.txt/r));
 
+    $self->{handles}   = {};
+
+    # リプライメッセージの定義
+    my $message_set = Uc::IrcGateway::Message->message_set;
+    while (my ($message_key, $message_value) = each $message_set) {
+        $self->{message_set}{$message_key} //= $message_value;
+    }
+
+    # IRCイベントの登録
     my $irc_event = $self->event_irc_command;
     my $ctcp_event = $self->event_ctcp_command;
     for my $event ((values $irc_event), (values $ctcp_event)) {
         $event->{guard} = $self->reg_cb($event->{name} => $event->{code});
     }
 
+    my $handle_log = sub {
+        my ($self, $message) = @_;
+        warn "$message\n";
+    };
+
+    # コネクションハンドラのイベントの登録
     $self->reg_cb(
-        on_eof => sub {
-            my ($self, $handle) = @_;
-        },
-        on_error => sub {
-            my ($self, $handle, $fatal, $message) = @_;
-            carp "[$fatal] $message";
-        },
+        on_handle_connect => $handle_log,
+        on_handle_eof     => $handle_log,
+        on_handle_error   => $handle_log,
     );
+
+    # 例外処理の登録
+    $self->set_exception_cb(sub {
+        my ($exception, $eventname) = @_;
+        my $message = sprintf "[fatal] callback exception on event '%s': %s\n", $eventname, $exception =~ s/[\r\n]+$//r;
+
+        $self->condvar ? warn $message : die $message;
+        $self->condvar->send;
+    });
 
     $self;
 }
@@ -123,15 +148,19 @@ sub run {
             fh => $fh,
             ircd => $self,
 
-            on_error => sub {
-                my ($handle, $fatal, $message) = @_;
-                $self->event('on_error', $handle, $fatal, $message);
-                delete $self->handles->{refaddr($handle)} if $fatal;
-            },
             on_eof => sub {
                 my $handle = shift;
-                $self->event('on_eof', $handle);
-                delete $self->handles->{refaddr($handle)};
+                my $refaddr = refaddr $handle;
+                $self->event('on_handle_eof', "[info] handle{$refaddr} sent EOF: close connection by peer");
+                delete $self->handles->{$refaddr};
+            },
+            on_error => sub {
+                my ($handle, $fatal, $message) = @_;
+                my $refaddr = refaddr $handle;
+                $message = sprintf "[%s] handle{%s} sent an error: %s",
+                    ($fatal ? 'fatal' : 'warn'), $refaddr, $message =~ s/$REGEX{chomp}//gr;
+                $self->event('on_handle_error', $message);
+                delete $self->handles->{$refaddr} if $fatal;
             },
         );
         $handle->on_read(sub {
@@ -141,7 +170,10 @@ sub run {
                 $self->handle_irc_msg($handle, $self->codec->decode($line));
             });
         });
-        $self->handles->{refaddr($handle)} = $handle;
+
+        my $refaddr = refaddr($handle);
+        $self->handles->{$refaddr} = $handle;
+        $self->event('on_handle_connect', "[info] handle{$refaddr} meets @{[$self->servername]}.");
     }, sub {
         my ($fh, $host, $port) = @_;
         $self->{ctime} = scalar localtime;
@@ -154,7 +186,7 @@ sub run {
         say "   - Server created at @{[ $self->ctime ]}";
         say "   - Server time zone is @{[ $self->time_zone ]}";
         say "   - Gateway bot is @{[ $self->gatewayname ]}";
-#        say "   - Setting files are in @{[ $self->set_dir ]}";
+        say "   - Setting files are in @{[ $self->app_dir ]}";
         say "   - Message Of The Day uses @{[ scalar $self->motd ]}";
 
         if ($self->debug) {
@@ -248,7 +280,7 @@ sub handle_irc_msg {
     my $event = uc($msg->{command} || '');
        $event = exists $IRC_COMMAND_EVENT{$event} ? "irc_event_$event" : 'irc';
 
-    $self->logger($handle, debug => "handle_irc_msg: $raw, ".JSON::XS->new->pretty(1)->encode(\%opts));
+    $self->logger($handle, debug => "handle_irc_msg: $raw, ".JSON->new->pretty(1)->encode(\%opts) =~ s/$REGEX{chomp}//gr);
     $msg->{raw} = $raw;
     $msg->{$_}  = $opts{$_} for keys %opts;
     $self->event($event, $handle => $msg);
@@ -263,13 +295,43 @@ sub handle_ctcp_msg {
     $event = uc($msg->{command});
     $event = exists $CTCP_COMMAND_EVENT{$event} ? "ctcp_event_$event" : 'ctcp';
 
-    $self->logger($handle, debug => "handle_ctcp_msg: $raw, ".JSON::XS->new->pretty(1)->encode(\%opts));
+    $self->logger($handle, debug => "handle_ctcp_msg: $raw, ".JSON->new->pretty(1)->encode(\%opts) =~ s/$REGEX{chomp}//gr);
     $msg->{raw} = $raw;
     $msg->{$_}  = $opts{$_} for keys %opts;
     $self->event($event, $handle => $msg);
 }
 
 # server to client
+
+sub send_reply {
+    my ($self, $handle, $msg, $reply) = @_;
+    say "[error] send_reply: $reply" unless $self->check_connection($handle);
+
+    my $reply_set = $self->message_set->{$reply};
+
+    die "message set '$reply' is not defined" if not defined $reply_set;
+
+    my ($args, @args) = inflated_sprintf($reply_set->{format}, $msg->{response});
+    if ($args ne '') {
+        @args = split / /, $args;
+        if (scalar @args != 1) {
+            my $index = 0;
+            for my $i (0..$#args) {
+                $index = $i;
+                last if $args[$i] =~ /^:/;
+            }
+            $args[$index] .= join " ", '', splice @args, $index+1;
+        }
+        $args[-1] =~ s/^://;
+    }
+
+    my $reply_msg = mk_msg($self->to_prefix, $reply_set->{number}, $handle->self->nick, @args);
+       $reply_msg = $self->trim_message($reply_msg) if $reply_set->{trim_or_fileout};
+
+    $self->logger($handle, debug => "send_reply: $reply_msg");
+    $handle->push_write($self->codec->encode($reply_msg) . $CRLF);
+}
+
 sub send_msg {
     my ($self, $handle, $cmd, @args) = @_;
     $self->send_cmd($handle, $self->to_prefix, $cmd, $handle->self->nick, @args);
@@ -277,15 +339,14 @@ sub send_msg {
 
 sub send_cmd {
     my ($self, $handle, $user, $cmd, @args) = @_;
-    if (ref $handle and $handle->isa('Uc::IrcGateway::Connection')) {
-        my $prefix = ref $user && $user->isa('Uc::IrcGateway::User') ? $user->to_prefix : $user;
-        my $msg = mk_msg($prefix, $cmd, @args);
-        $self->logger($handle, debug => "send_cmd: $msg");
-        $handle->push_write($self->codec->encode($msg) . $CRLF);
-    }
-    else {
-        say "send_cmd: $cmd: ", join ", ", @args;
-    }
+    say "[error] send_cmd: $cmd: ", join ", ", @args unless $self->check_connection($handle);
+
+    my $prefix = blessed $user && $user->isa('Uc::IrcGateway::User') ? $user->to_prefix : $user;
+    my $msg = mk_msg($prefix, $cmd, @args);
+       $msg = $self->trim_message($msg);
+
+    $self->logger($handle, debug => "send_cmd: $msg");
+    $handle->push_write($self->codec->encode($msg) . $CRLF);
 }
 
 sub send_ctcp_query {
@@ -302,12 +363,59 @@ sub send_ctcp_reply {
 
 # other method
 
+sub default_app_dir {
+    my $self = shift;
+    my $path = file($0);
+    my ($dir, $app_dir) = ($path->dir, sprintf '.%s', $path->basename);
+
+    if ($self->{app_dir_to_home}) {
+        for my $home (qw/HOME USERPROFILE/) {
+            if (exists $ENV{$home} and -e $ENV{$home}) {
+                $dir = $ENV{$home}; last;
+            }
+        }
+    }
+
+    dir($dir, $app_dir);
+}
+
+sub check_connection {
+    not blessed $_[1] or $_[1]->destroyed ? 0 : 1;
+}
+
+sub check_params {
+    my ($self, $handle, $msg, $plugin) = @_;
+    return 0 unless $self->check_connection($handle);
+
+    my $count = $plugin->config->{require_params_count} || 0;
+
+    if (scalar $msg->{params} < $count) {
+        $msg->{response}{command} = $msg->{command};
+        $self->send_reply( $handle, $msg, 'ERR_NEEDMOREPARAMS' );
+        return 0;
+    }
+
+    return 1;
+}
+
 sub send_welcome {
     my ($self, $handle) = @_;
-    $self->send_msg( $handle, RPL_WELCOME, $self->welcome_message );
-    $self->send_msg( $handle, RPL_YOURHOST, "Your host is @{[ $self->servername ]} [@{[ $self->servername ]}/@{[ $self->port ]}]. @{[ ref($self).'/'.$self->VERSION ]}" );
-    $self->send_msg( $handle, RPL_CREATED, "This server was created ".$self->ctime );
-    $self->send_msg( $handle, RPL_MYINFO, "@{[ $self->servername ]} @{[ ref($self).'-'.$self->VERSION ]}" );
+    my $user = $handle->self;
+    my $msg = { response => {
+        nick => $user->nick,
+        user => $user->login,
+        host => $user->host,
+        servername => $self->servername,
+        version => ref($self).'/'.$self->VERSION,
+        date => $self->ctime,
+        available_user_modes => '*',
+        available_channel_modes => '*',
+    } };
+
+    $self->send_reply( $handle, $msg, 'RPL_WELCOME' );
+    $self->send_reply( $handle, $msg, 'RPL_YOURHOST' );
+    $self->send_reply( $handle, $msg, 'RPL_CREATED' );
+    $self->send_reply( $handle, $msg, 'RPL_MYINFO' );
 
     $self->handle_irc_msg( $handle, 'MOTD' );
 }
@@ -338,6 +446,12 @@ sub check_channel {
     return 1;
 }
 
+sub trim_message {
+    my ($self, $message) = @_;
+    chop $message while length $self->codec->encode($message).$CRLF > $MAXBYTE;
+
+    $message;
+}
 
 1; # Magic true value required at end of module
 __END__

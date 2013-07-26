@@ -3,15 +3,35 @@ use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 
-sub action :IrcEvent('USER') {
-    my ($self, $handle, $msg, $plugin) = check_params(@_);
-    return () unless $self && $handle;
+sub init {
+    my ($plugin, $class) = @_;
+    my $config = $plugin->config;
+    $config->{require_params_count} //= 1;
+}
+
+sub event :IrcEvent('USER') {
+    my $self = shift;
+    $self->run_hook('irc.user.begin' => \@_);
+
+        action($self, @_);
+
+    $self->run_hook('irc.user.end' => \@_);
+}
+
+sub action {
+    my $self = shift;
+    my ($handle, $msg, $plugin) = @_;
+    return unless $self->check_params(@_);
+
+    $self->run_hook('irc.user.start' => \@_);
+
+    $msg->{response} = {};
 
     my ($login, $host, $server, $realname) = @{$msg->{params}};
     my $cmd  = $msg->{command};
     my $user = $handle->self;
     if (defined $user && ref $user->isa('Uc::IrcGateway::User')) {
-        $self->send_msg( $handle, ERR_ALREADYREGISTRED, 'Unauthorized command (already registered)' );
+        $self->send_reply( $handle, $msg, 'ERR_ALREADYREGISTRED' );
         return ();
     }
 
@@ -33,7 +53,7 @@ sub action :IrcEvent('USER') {
         ));
     }
 
-    @_;
+    $self->run_hook('irc.user.finish' => \@_);
 }
 
 1;
