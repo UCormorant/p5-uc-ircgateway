@@ -12,6 +12,7 @@ use Uc::IrcGateway::Message;
 use Uc::IrcGateway::TempUser;
 use Uc::IrcGateway::User;
 
+use JSON ();
 use AnyEvent::IRC::Util qw(
     mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
     prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
@@ -50,6 +51,7 @@ our @EXPORT = qw(
     opt_parser
     decorate_text
     replace_crlf
+    to_json
 
     mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
     prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
@@ -73,5 +75,10 @@ sub decorate_text {
 }
 
 sub replace_crlf { $_[0] =~ s/[\r\n]+/ /gr; }
+
+sub to_json {
+    state $JSON = JSON->new->pretty(1);
+    $JSON->encode(+shift) =~ s/$REGEX{chomp}//r;
+}
 
 1;

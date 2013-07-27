@@ -41,7 +41,8 @@ test_requires 'Test::Base::Less';
 requires 'AnyEvent' => '7.04';
 requires 'AnyEvent::IRC' => '0.6'; # for is_nick_prefix, join_prefix
 requires 'Path::Class' => '0.29';
-requires 'Text::InflateSprintf' => '0.01';
+requires 'Log::Dispatch' => '2.36'; # for Log::Dispatch::Code
+requires 'Text::InflateSprintf' => '0.02';
 
 # utig.pl
 requires 'Uc::Model::Twitter' => '1.00';

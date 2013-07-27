@@ -4,78 +4,49 @@ use 5.014;
 use warnings;
 use utf8;
 
-use Carp qw(carp);
-use Scalar::Util qw(refaddr);
-
-use parent qw(Object::Event);
-
-use Class::Accessor::Lite (
-    rw => [qw(
-        on_destroy
-        callbacks
-    )],
-);
-
-my $LOGGER;
-
-sub import {
-    my ($class, %logger) = @_;
-
-    no strict 'refs';
-    *{"Uc::IrcGateway::logger"} = sub {
-        my ($ircd, $handle, $tag) = @_;
-        my $event = sprintf("%s_%s", refaddr($ircd), $tag);
-        my $handled = $LOGGER->event($event => @_);
-           $handled = $LOGGER->event($tag => @_) if not $handled;
-
-        carp "Tag:[$tag] is not registered in logger." if not $handled;
-    };
-    *{"Uc::IrcGateway::reg_logger"} = sub {
-        my ($ircd, %subs) = @_;
-        my $refaddr = refaddr($ircd);
-        my $callbacks = $LOGGER->callbacks;
-        while (my ($tag, $sub) = %subs) {
-            my $event = sprintf("%s_%s", $refaddr, $tag);
-            $callbacks->{$tag} = $LOGGER->reg_cb($event => $sub);
-        }
-    };
-    *{"Uc::IrcGateway::reg_logger_destroy"} = sub {
-        my ($ircd, $sub) = @_;
-        $LOGGER->on_destroy($sub);
-    };
-
-    $LOGGER = __PACKAGE__->new();
-}
+use parent qw(Log::Dispatch);
 
 sub new {
     my $class = shift;
-    my $logger = $class->SUPER::new;
-
-    $logger->reg_cb(
-        debug => \&debug,
-        warn => \&warn,
-    );
-
-    $logger;
+    my $self = $class->SUPER::new(@_);
+    $self->{on_destroy} = [];
+    $self->{log_level}  = {};
+    $self;
 }
 
-sub debug {
-    my ($self, $ircd, $handle, $tag, $message, $level) = @_;
-    $message ||= "";
-    $level   ||= 0;
-    carp $ircd->err_codec->encode(sprintf "[%s] %s", $tag, $message) if $level < $ircd->debug;
+sub log {
+    my ($self, $level, @args) = @_;
+    my $message = $args[0];
+    if (exists $self->log_level->{$level}) {
+        ($level, $message) = $self->log_level->{$level}->(@args);
+    }
+
+    $self->SUPER::log(level => $level, message => $message) if $level;
 }
 
-sub warn {
-    my ($self, $ircd, $handle, $tag, $message) = @_;
-    $message ||= "";
-    carp $ircd->err_codec->encode(sprintf "[%s] %s", $tag, $message);
+sub log_and_die {
+    my $self = shift;
+    $self->log(@_);
 }
 
+sub log_level { $_[0]{log_level} }
+sub add_log_level {
+    my ($self, $level, $code) = @_;
+    $self->log_level->{$level} = $code;
+}
+
+sub on_destroy {
+    my ($self, $code) = @_;
+    if ($code) {
+        push $self->{on_destroy}, $code;
+    }
+    $self->{on_destroy};
+}
 sub DESTROY {
     my $self = shift;
-    my $ev = $self->on_destroy;
-    $ev->($self) if ref $ev eq 'CODE';
+    for my $code (@{$self->on_destroy}) {
+        $code->($self) if ref $code eq 'CODE';
+    }
 }
 
 
