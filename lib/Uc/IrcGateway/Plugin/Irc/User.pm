@@ -30,13 +30,13 @@ sub action {
     my ($login, $host, $server, $realname) = @{$msg->{params}};
     my $cmd  = $msg->{command};
     my $user = $handle->self;
-    if (defined $user && ref $user->isa('Uc::IrcGateway::User')) {
+    if (ref $user->isa('Uc::IrcGateway::User')) {
         $self->send_reply( $handle, $msg, 'ERR_ALREADYREGISTRED' );
         return ();
     }
 
     $host ||= '0'; $server ||= '*'; $realname ||= '';
-    if (defined $user) {
+    if ($user->nick) {
         $user->login($login);
         $user->realname($realname);
         $user->host($host);
@@ -47,10 +47,11 @@ sub action {
         $self->send_welcome( $handle );
     }
     else {
-        $handle->self(Uc::IrcGateway::TempUser->new(
-            login => $login, realname => $realname,
-            host => $host, addr => $self->host, server => $server,
-        ));
+        $user->login($login);
+        $user->realname($realname);
+        $user->host($host);
+        $user->addr($self->host);
+        $user->server($server);
     }
 
     $self->run_hook('irc.user.finish' => \@_);

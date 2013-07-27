@@ -49,13 +49,13 @@ sub action {
 
     $msg->{response}{nick} = $msg->{params}[0];
 
-    if (defined $handle->self && $handle->self->nick) {
+    if ($handle->self->isa('Uc::IrcGateway::User')) {
         # change nick
         $self->send_cmd( $handle, $handle->self, $msg->{command}, $msg->{response}{nick} );
         $handle->self->nick($msg->{response}{nick});
         $handle->self->update;
     }
-    elsif (defined $handle->self) {
+    elsif ($handle->self->login) {
         # finish register user
         $user->nick($msg->{response}{nick});
         $user->register($handle);
@@ -64,7 +64,7 @@ sub action {
     }
     else {
         # start register user
-        $handle->self(Uc::IrcGateway::TempUser->new( nick => $msg->{response}{nick} ));
+        $handle->self->nick($msg->{response}{nick});
     }
 
     $self->run_hook('irc.nick.finish' => \@_);

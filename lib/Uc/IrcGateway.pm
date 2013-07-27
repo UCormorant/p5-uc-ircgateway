@@ -94,24 +94,14 @@ sub new {
     }
 
     # ロガーの準備
-    $self->{logger} //= Uc::IrcGateway::Logger->new(
-        outputs => [
-            [
-                'Screen',
-                min_level => ($self->debug ? 'debug' : 'info'),
-                stderr    => 1,
-                newline   => 1,
-            ],
-        ],
-        callbacks => sub { my %p = @_; "[$p{level}] $p{message}"; },
-    );
-    $self->reg_cb( logger => sub { +shift->{logger}->log(@_); } );
+    $self->logger;
+    $self->reg_cb( logger => sub { +shift->logger->log(@_); } );
 
     # コネクションハンドラのイベントの登録
     $self->reg_cb(
-        on_handle_connect => sub { $_[0]->{logger}->log(info  => $_[1]) },
-        on_handle_eof     => sub { $_[0]->{logger}->log(info  => $_[1]) },
-        on_handle_error   => sub { $_[0]->{logger}->log(error => $_[1]) },
+        on_handle_connect => sub { $_[0]->logger->log(info  => $_[1]) },
+        on_handle_eof     => sub { $_[0]->logger->log(info  => $_[1]) },
+        on_handle_error   => sub { $_[0]->logger->log(error => $_[1]) },
     );
 
     # 例外処理の登録
@@ -120,11 +110,11 @@ sub new {
         my $message = sprintf "callback exception on event '%s': %s", $eventname, $exception =~ s/[\r\n]+$//r;
 
         if ($self->condvar) {
-            $self->{logger}->log(emerg => $message);
+            $self->logger->log(emerg => $message);
             $self->condvar->send;
         }
         else {
-            $self->{logger}->log_and_die(emerg => $message);
+            $self->logger->log_and_die(emerg => $message);
         }
     });
 
@@ -183,6 +173,8 @@ sub run {
                 $self->handle_irc_msg($handle, $self->codec->decode($line));
             });
         });
+
+        $handle->self(Uc::IrcGateway::TempUser->new);
 
         my $refaddr = refaddr($handle);
         $self->handles->{$refaddr} = $handle;
@@ -324,7 +316,7 @@ sub send_reply {
         $self->log($handle, error => "send_reply: $reply: connection not found");
         return;
     }
-    $self->log(debug => "send_reply: $reply", $handle);
+    $self->log($handle, debug => "send_reply: $reply", $handle);
 
     my $reply_set = $self->message_set->{$reply};
 
@@ -344,7 +336,7 @@ sub send_reply {
         $args[-1] =~ s/^://;
     }
 
-    my $reply_msg = mk_msg($self->to_prefix, $reply_set->{number}, $handle->self->nick, @args);
+    my $reply_msg = mk_msg($self->to_prefix, $reply_set->{number}, ($handle->self->nick || '*'), @args);
        $reply_msg = $self->trim_message($reply_msg) if $reply_set->{trim_or_fileout};
 
     $self->log($handle, debug => "send_reply: $reply_msg");
@@ -363,7 +355,7 @@ sub send_cmd {
         return;
     }
 
-    my $prefix = blessed $user && $user->isa('Uc::IrcGateway::User') ? $user->to_prefix : $user;
+    my $prefix = blessed $user && $user->isa('Uc::IrcGateway::User') ? $user->to_prefix : $user ? $user : '*';
     my $msg = mk_msg($prefix, $cmd, @args);
        $msg = $self->trim_message($msg);
 
@@ -478,6 +470,22 @@ sub log {
     my $self = shift;
     my $handle = shift;
     $self->event( logger => @_, $handle );
+}
+
+sub logger {
+    my $self = shift;
+    $self->{logger} //= Uc::IrcGateway::Logger->new(
+        outputs => [
+            [
+                'Screen',
+                min_level => ($self->debug ? 'debug' : 'info'),
+                stderr    => 1,
+                newline   => 1,
+            ],
+        ],
+        callbacks => sub { my %p = @_; $self->err_codec->encode("[$p{level}] $p{message}"); },
+    );
+    $self->{logger};
 }
 
 

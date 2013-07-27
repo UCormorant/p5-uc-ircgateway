@@ -6,6 +6,14 @@ use utf8;
 
 use parent qw(Log::Dispatch);
 
+our %LOG_LEVEL = ();
+sub log_level { \%LOG_LEVEL }
+sub add_log_level {
+    my ($self, $level, $code) = @_;
+    $self->log_level->{$level} = [] if not exists $self->log_level->{$level};
+    push $self->log_level->{$level}, $code;
+}
+
 sub new {
     my $class = shift;
     my $self = $class->SUPER::new(@_);
@@ -15,24 +23,24 @@ sub new {
 }
 
 sub log {
-    my ($self, $level, @args) = @_;
-    my $message = $args[0];
+    my ($self, $level, $message) = @_;
     if (exists $self->log_level->{$level}) {
-        ($level, $message) = $self->log_level->{$level}->(@args);
+        for my $code (@{$self->log_level->{$level}}) {
+            ($level, $message) = $code->(@_);
+        }
+    }
+    elsif (exists $self->log_level->{any}) {
+        for my $code (@{$self->log_level->{any}}) {
+            ($level, $message) = $code->(@_);
+        }
     }
 
     $self->SUPER::log(level => $level, message => $message) if $level;
 }
 
 sub log_and_die {
-    my $self = shift;
-    $self->log(@_);
-}
-
-sub log_level { $_[0]{log_level} }
-sub add_log_level {
-    my ($self, $level, $code) = @_;
-    $self->log_level->{$level} = $code;
+    my ($self, $level, $message) = @_;
+    $self->SUPER::log_and_die(level => $level, message => $message, carp_level => 3);
 }
 
 sub on_destroy {

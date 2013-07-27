@@ -13,6 +13,7 @@ Uc::IrcGateway 作りこみ計画
     各種コマンド完成
         残: pass, kick, mode, names, ping, pong, privmsg, user, who, whois
     設定を gatewaybot と対話で出来るようにしてはどうか
+    memo: プラガブルにしてロガーつけてデータベース使いだしたらメモリ消費7MB増
 
 TODO:
     join したチャンネルに発言が流れる仕様
