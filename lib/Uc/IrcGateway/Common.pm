@@ -70,6 +70,7 @@ sub opt_parser { my %opt; $opt{$1} = $2 ? $2 : 1 while $_[0] =~ /(\w+)(?:=(\S+))
 
 sub decorate_text {
     my ($text, $color) = @_;
+    $color //= '';
 
     $color ne '' ? "\03$color$text\03" : $text;
 }
@@ -77,7 +78,7 @@ sub decorate_text {
 sub replace_crlf { $_[0] =~ s/[\r\n]+/ /gr; }
 
 sub to_json {
-    state $JSON = JSON->new->pretty(1);
+    state $JSON = JSON->new->pretty;
     $JSON->encode(+shift) =~ s/$REGEX{chomp}//r;
 }
 
