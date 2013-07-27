@@ -30,7 +30,7 @@ sub action {
     my ($login, $host, $server, $realname) = @{$msg->{params}};
     my $cmd  = $msg->{command};
     my $user = $handle->self;
-    if (ref $user->isa('Uc::IrcGateway::User')) {
+    if ($user->isa('Uc::IrcGateway::User')) {
         $self->send_reply( $handle, $msg, 'ERR_ALREADYREGISTRED' );
         return ();
     }
