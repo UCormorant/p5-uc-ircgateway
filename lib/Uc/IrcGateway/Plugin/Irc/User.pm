@@ -32,26 +32,20 @@ sub action {
     my $user = $handle->self;
     if ($user->isa('Uc::IrcGateway::User')) {
         $self->send_reply( $handle, $msg, 'ERR_ALREADYREGISTRED' );
-        return ();
+        return;
     }
 
     $host ||= '0'; $server ||= '*'; $realname ||= '';
+    $user->login($login);
+    $user->realname($realname);
+    $user->host($host);
+    $user->addr($self->host);
+    $user->server($server);
+
     if ($user->nick) {
-        $user->login($login);
-        $user->realname($realname);
-        $user->host($host);
-        $user->addr($self->host);
-        $user->server($server);
         $user->register($handle);
         $msg->{registered} = 1;
         $self->send_welcome( $handle );
-    }
-    else {
-        $user->login($login);
-        $user->realname($realname);
-        $user->host($host);
-        $user->addr($self->host);
-        $user->server($server);
     }
 
     $self->run_hook('irc.user.finish' => \@_);
