@@ -42,10 +42,12 @@ sub action {
         $handle->get_channels($channel)->join_users($msg->{response}{login});
         $handle->get_channels($channel)->give_operator($msg->{response}{login});
 
-        $self->run_hook('irc.join.before_reply' => \@_);
+        $self->run_hook('irc.join.before_command' => \@_);
 
         # send join message
         $self->send_cmd( $handle, $handle->self, 'JOIN', $msg->{response}{channel} );
+
+        $self->run_hook('irc.join.before_reply' => \@_);
 
         # sever reply
         $self->send_reply( $handle, $msg, 'RPL_TOPIC' ) if $msg->{response}{topic};

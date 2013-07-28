@@ -22,7 +22,7 @@ our @IRC_COMMAND_LIST_ALL = qw(
 );
 our @IRC_COMMAND_LIST = qw(
     nick user quit
-    join part mode invite
+    join part mode invite kick
     topic privmsg notice away
     names list who whois
     ison

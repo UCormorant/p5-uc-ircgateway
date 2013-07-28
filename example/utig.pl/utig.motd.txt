@@ -11,7 +11,8 @@ Uc::IrcGateway 作りこみ計画
         ログ
         テスト
     各種コマンド完成
-        残: pass, kick, mode, names, ping, pong, privmsg, user, who, whois
+        残: pass, mode, names, ping, pong, privmsg, who, whois
+    各コマンドのマスク機能(そのうち)
     設定を gatewaybot と対話で出来るようにしてはどうか
     memo: プラガブルにしてロガーつけてデータベース使いだしたらメモリ消費7MB増
 

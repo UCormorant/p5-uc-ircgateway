@@ -456,6 +456,10 @@ sub check_channel {
         $self->send_msg( $handle, ERR_NOTONCHANNEL, $chan, "You're not on that channel" ) unless $opt{silent};
         return 0;
     }
+    if ($opt{operator} && !$handle->get_channels($chan)->is_operator($handle->self->login)) {
+        $self->send_msg( $handle, ERR_CHANOPRIVSNEEDED, $chan, "You're not channel operator" ) unless $opt{silent};
+        return 0;
+    }
     return 1;
 }
 

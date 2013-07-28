@@ -55,19 +55,22 @@ sub set_user {
 
 sub get_users {
     my $self = shift;
-    my $method = wantarray ? 'search' : 'single';
-    $self->schema->$method('user', { login => \@_ });
+    my $login = @_ == 1 ? shift : \@_;
+    my $method = ref $login ? 'search' : 'single';
+    $self->schema->$method('user', { login => $login });
 }
 
 sub get_users_by_nicks {
     my $self = shift;
-    my $method = wantarray ? 'search' : 'single';
-    $self->schema->$method('user', { nick => \@_ });
+    my $nick = @_ == 1 ? shift : \@_;
+    my $method = ref $nick ? 'search' : 'single';
+    $self->schema->$method('user', { nick => $nick });
 }
 
 sub del_users {
     my $self = shift;
-    $self->schema->delete('user', { login => \@_ });
+    my $login = @_ == 1 ? shift : \@_;
+    $self->schema->delete('user', { login => $login });
 }
 
 sub has_user {

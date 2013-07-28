@@ -3,9 +3,10 @@ package Uc::IrcGateway::TempUser;
 use 5.014;
 use warnings;
 use utf8;
-use JSON::XS ();
 
 use Carp qw(croak);
+use Path::Class qw(file);
+use Uc::IrcGateway::Structure;
 
 our %MODE_TABLE;
 our @USER_PROP;
@@ -46,8 +47,21 @@ sub register {
     croak "user registration error: nick is not defined"  if not $self->nick;
     croak "user registration error: login is not defined" if not $self->login;
 
-    my $user = $handle->set_user($self->user_prop);
+    my $db = file($handle->ircd->app_dir, sprintf "%s.sqlite", $self->login);
+    my $exists_db = -e $db;
+    $handle->schema->{dbh} = setup_dbh($db);
+    $handle->schema->setup_database if not $exists_db;
+
+    my $user;
+    if ($user = $handle->get_users($self->login)) {
+        $user->update($self->user_prop);
+    }
+    else {
+        $user = $handle->set_user($self->user_prop);
+    }
     $handle->self($user);
+    map { $_->part_users($handle->self->login) } $handle->get_channels($handle->self->channels);
+
     $user;
 }
 
