@@ -95,7 +95,7 @@ sub new {
 
     # ロガーの準備
     $self->logger;
-    $self->reg_cb( logger => sub { +shift->logger->log(@_); } );
+    $self->reg_cb( do_logging => sub { +shift->logger->log(@_); } );
 
     # コネクションハンドラのイベントの登録
     $self->reg_cb(
@@ -473,7 +473,7 @@ sub trim_message {
 sub log {
     my $self = shift;
     my $handle = shift;
-    $self->event( logger => @_, $handle );
+    $self->event( do_logging => @_, $handle );
 }
 
 sub logger {
