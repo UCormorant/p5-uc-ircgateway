@@ -1,0 +1,76 @@
+{
+   "abstract" : "ãã©ã¬ãã«ãªãªã¬ãªã¬IRCã²ã¼ãã¦ã§ã¤åºåºã¯ã©ã¹",
+   "author" : [
+      "U=Cormorant  C<< <u@chimata.org> >>"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "Minilla/v0.5.6, CPAN::Meta::Converter version 2.130880",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "Uc-IrcGateway",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "inc",
+         "share",
+         "eg",
+         "examples",
+         "author"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "Test::Base::Less" : "0",
+            "Test::Difflet" : "0",
+            "Test::More" : "0.94",
+            "Test::TCP" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "CPAN::Meta" : "0",
+            "CPAN::Meta::Prereqs" : "0",
+            "Module::Build" : "0.38"
+         }
+      },
+      "develop" : {
+         "requires" : {
+            "Test::CPAN::Meta" : "0",
+            "Test::MinimumVersion" : "0.10108",
+            "Test::Pod" : "1.41",
+            "Test::Spellunker" : "v0.2.7"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "AnyEvent" : "7.04",
+            "AnyEvent::IRC" : "0.6",
+            "AnyEvent::Twitter" : "0",
+            "AnyEvent::Twitter::Stream" : "0",
+            "Clone" : "0",
+            "Config::Pit" : "0",
+            "DateTime::Format::DateParse" : "0",
+            "HTML::Entities" : "0",
+            "Log::Dispatch" : "2.36",
+            "Net::Twitter::Lite" : "0",
+            "Path::Class" : "0.29",
+            "Text::InflateSprintf" : "0.04",
+            "Uc::Model::Twitter" : "1.00",
+            "YAML" : "0",
+            "perl" : "5.014"
+         }
+      }
+   },
+   "release_status" : "unstable",
+   "version" : "v3.0.0",
+   "x_contributors" : [
+      "U=Cormorant <u@chimata.org>"
+   ]
+}

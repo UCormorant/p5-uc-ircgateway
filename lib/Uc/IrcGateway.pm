@@ -502,6 +502,8 @@ sub logger {
 1; # Magic true value required at end of module
 __END__
 
+=encoding utf8;
+
 =head1 NAME
 
 Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラス
