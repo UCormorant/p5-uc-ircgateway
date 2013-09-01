@@ -44,24 +44,50 @@ sub action {
 
     if (scalar @channels) {
         for my $channel (@channels) {
-            my $c_name = $channel->private ? '*' : $channel->name;
-            for my $u ($handle->get_users($channel->login_list)) {
-                my $mode = $u->away ? 'G' : 'H';
-                $mode .= "*" if $u->operator; # server operator
-                $mode .= $channel->is_operator($u->login) ? '@' : $channel->is_speaker($u->login) ? '+' : '';
-                $self->send_msg( $handle, RPL_WHOREPLY, $c_name, $u->login, $u->host, $u->server, $u->nick, $mode, '0 '.$u->realname);
+            # TODO: s,p and channel menber
+            my $c_name = $channel->name;
+            for my $u ($channel->users) {
+                my $u_login = $u->login;
+                my $u_state = $u->away ? 'G' : 'H';
+                $u_state .= "*" if $u->operator; # server operator
+                $u_state .= $channel->is_operator($u_login) ? '@' : $channel->is_speaker($u_login) ? '+' : '';
+
+                $msg->{response} = {};
+                $msg->{response}{name} = $c_name;
+                $msg->{response}{channel} = $c_name;
+                $msg->{response}{user} = $u_login;
+                $msg->{response}{host} = $u->host;
+                $msg->{response}{server} = $u->server;
+                $msg->{response}{nick} = $u->nick;
+                $msg->{response}{user_state} = $u_state;
+                $msg->{response}{hopcount} = 0;
+                $msg->{response}{realname} = $u->realname;
+                $self->send_reply( $handle, $msg, 'RPL_WHOREPLY' );
             }
-            $self->send_msg( $handle, RPL_ENDOFWHO, $channel->name, 'END of /WHO List');
+            $self->send_reply( $handle, $msg, 'RPL_ENDOFWHO' );
         }
     }
     else {
+        my $name = '*';
+        $msg->{response} = {};
+        $msg->{response}{name} = $name;
+
         my $u = $handle->get_users($mask);
         if ($u) {
-            my $mode = $u->away ? 'G' : 'H';
-            $mode .= "*" if $u->operator; # server operator
-            $self->send_msg( $handle, RPL_WHOREPLY, '*', $u->login, $u->host, $u->server, $u->nick, $mode, '0 '.$u->realname);
+            my $u_state = $u->away ? 'G' : 'H';
+            $u_state .= "*" if $u->operator; # server operator
+
+            $msg->{response}{channel} = $name;
+            $msg->{response}{user} = $u->login;
+            $msg->{response}{host} = $u->host;
+            $msg->{response}{server} = $u->server;
+            $msg->{response}{nick} = $u->nick;
+            $msg->{response}{user_state} = $u_state;
+            $msg->{response}{hopcount} = 0;
+            $msg->{response}{realname} = $u->realname;
+            $self->send_reply( $handle, $msg, 'RPL_WHOREPLY' );
         }
-        $self->send_msg( $handle, RPL_ENDOFWHO, '*', 'END of /WHO List');
+        $self->send_reply( $handle, $msg, 'RPL_ENDOFWHO' );
     }
 
     $self->run_hook('irc.who.finish' => \@_);

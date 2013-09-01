@@ -1,6 +1,6 @@
 use utf8;
 use strict;
-use Test::More tests => 161;
+use Test::More tests => 163;
 use Test::TCP;
 use Test::Difflet qw(is_deeply);
 use Test::Base::Less;
@@ -217,11 +217,24 @@ __DATA__
 --- input
 +{
     nick => 'nick',
-    flag => ['', '@', '+'],
+    user_state => ['', '@', '+'],
     channel => [qw/#chan1 #chan2 #chan3/]
 }
 --- expected
 :127.0.0.1 319 testnick nick :#chan1 @#chan2 +#chan3
+
+=== RPL_WHOISCHANNELS
+--- number: 319
+--- input
++{
+    nick => 'nick',
+    user_state => [('', '@', '+') x 50],
+    channel => [qw/#chan1 #chan2 #chan3/ x 50]
+}
+--- expected
+:127.0.0.1 319 testnick nick :#chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2
+:127.0.0.1 319 testnick nick :+#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1
+:127.0.0.1 319 testnick nick :@#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3 #chan1 @#chan2 +#chan3
 
 === RPL_WHOWASUSER
 --- number: 314
@@ -390,10 +403,11 @@ __DATA__
     host => 'host.name',
     realname => 'real name',
     server => 'server.name',
+    user_state => 'H*',
     hopcount => 2,
 }
 --- expected
-:127.0.0.1 352 testnick #channel user host.name server.name nick, ( [H|G] * [@+] :2 real name
+:127.0.0.1 352 testnick #channel user host.name server.name nick H* :2 real name
 
 === RPL_ENDOFWHO
 --- number: 315
@@ -408,11 +422,27 @@ __DATA__
 --- number: 353
 --- input
 +{
+    channel_mode => '=',
     channel => '#channel',
+    user_state => ['', '@', '+'],
     nick => [qw/nick1 nick2 nick3/],
 }
 --- expected
-:127.0.0.1 353 testnick [=*@]#channel, :[@+]nick1 [@+]nick2 [@+]nick3
+:127.0.0.1 353 testnick = #channel :nick1 @nick2 +nick3
+
+=== RPL_NAMREPLY
+--- number: 353
+--- input
++{
+    channel_mode => '=',
+    channel => '#channel',
+    user_state => [('', '@', '+') x 50],
+    nick => [qw/nick1 nick2 nick3/ x 50],
+}
+--- expected
+:127.0.0.1 353 testnick = #channel :nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2
+:127.0.0.1 353 testnick = #channel :+nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1 @nick2 +nick3 nick1
+:127.0.0.1 353 testnick = #channel :@nick2 +nick3
 
 === RPL_ENDOFNAMES
 --- number: 366
@@ -575,81 +605,113 @@ __DATA__
 --- number: 200
 --- input
 +{
+    version_and_debug_level => '1.2.3-4',
+    destination => '0',
+    next_server => '0',
+    protocol_version => '0',
+    link_uptime_in_seconds => '0',
+    backstream_sendq => '0',
+    upstream_sendq => '0',
 }
 --- expected
-:127.0.0.1 200 testnick Link %(version_and_debug_level)s %(destination)s, %(next_server)s V%(protocol_version)s %(link_uptime_in_seconds)s %(backstream_sendq)s %(upstream_sendq)s
+:127.0.0.1 200 testnick Link 1.2.3-4 0, 0 V0 0 0 0
 
 === RPL_TRACECONNECTING
 --- number: 201
 --- input
 +{
+    class => '',
+    server => 'test.server',
 }
 --- expected
-:127.0.0.1 201 testnick Try. %(class)s %(server)s
+:127.0.0.1 201 testnick Try.  test.server
 
 === RPL_TRACEHANDSHAKE
 --- number: 202
 --- input
 +{
+    class => '',
+    server => 'test.server',
 }
 --- expected
-:127.0.0.1 202 testnick H.S. %(class)s %(server)s
+:127.0.0.1 202 testnick H.S.  test.server
 
 === RPL_TRACEUNKNOWN
 --- number: 203
 --- input
 +{
+    class => '',
+    client_ip_address => '192.168.0.1',
 }
 --- expected
-:127.0.0.1 203 testnick ???? %(class)s [%(client_ip_address)s]
+:127.0.0.1 203 testnick ????  [192.168.0.1]
 
 === RPL_TRACEOPERATOR
 --- number: 204
 --- input
 +{
+    class => '',
+    nick => 'nick',
 }
 --- expected
-:127.0.0.1 204 testnick Oper %(class)s %(nick)s
+:127.0.0.1 204 testnick Oper  nick
 
 === RPL_TRACEUSER
 --- number: 205
 --- input
 +{
+    class => '',
+    nick => 'nick',
 }
 --- expected
-:127.0.0.1 205 testnick User %(class)s %(nick)s
+:127.0.0.1 205 testnick User  nick
 
 === RPL_TRACESERVER
 --- number: 206
 --- input
 +{
+    class => '',
+    int => '1',
+    server => 'server',
+    nick => 'nick',
+    user => 'user',
+    host => 'host',
+    protocol_version => '',
 }
 --- expected
-:127.0.0.1 206 testnick Serv %(class)s %(int)sS %(int)sC %(server)s, %(nick)s!%(user)s@%(host)s V%(protocol_version)s
+:127.0.0.1 206 testnick Serv  1S 1C server, nick!user@host V
 
 === RPL_TRACESERVICE
 --- number: 207
 --- input
 +{
+    class => '',
+    name => 'name',
+    type => 'type',
+    active_type => '',
 }
 --- expected
-:127.0.0.1 207 testnick Service %(class)s %(name)s %(type)s %(active_type)s
+:127.0.0.1 207 testnick Service  name type
 
 === RPL_TRACENEWTYPE
 --- number: 208
 --- input
 +{
+    newtype => 'newtype',
+    client_name => 'client',
 }
 --- expected
-:127.0.0.1 208 testnick %(newtype)s 0 %(client_name)s
+:127.0.0.1 208 testnick newtype 0 client
 
 === RPL_TRACECLASS
 --- number: 209
 --- input
 +{
+    class => '',
+    count => '5',
 }
 --- expected
-:127.0.0.1 209 testnick Class %(class)s %(count)s
+:127.0.0.1 209 testnick Class  5
 
 === RPL_TRACERECONNECT
 --- number: 210
@@ -683,25 +745,37 @@ __DATA__
 --- number: 211
 --- input
 +{
+    linkname => '0',
+    sendq => '0',
+    sent_messages => '0',
+    sent_Kbytes => '0',
+    received_messages => '0',
+    received_Kbytes => '0',
+    time_open => '0',
 }
 --- expected
-:127.0.0.1 211 testnick %(linkname)s %(sendq)s %(sent_messages)s, %(sent_Kbytes)s %(received_messages)s %(received_Kbytes)s %(time_open)s
+:127.0.0.1 211 testnick 0 0 0, 0 0 0 0
 
 === RPL_STATSCOMMANDS
 --- number: 212
 --- input
 +{
+    command => 'NICK',
+    count => '100',
+    byte_count => '1000',
+    remote_count => '1000',
 }
 --- expected
-:127.0.0.1 212 testnick %(command)s %(count)s %(byte_count)s %(remote_count)s
+:127.0.0.1 212 testnick NICK 100 1000 1000
 
 === RPL_ENDOFSTATS
 --- number: 219
 --- input
 +{
+    stats_letter => '',
 }
 --- expected
-:127.0.0.1 219 testnick %(stats_letter)s :End of STATS report
+:127.0.0.1 219 testnick  :End of STATS report
 
 === RPL_STATSUPTIME
 --- number: 242
@@ -719,9 +793,11 @@ __DATA__
 --- number: 243
 --- input
 +{
+    hostmask => '*',
+    name => 'name',
 }
 --- expected
-:127.0.0.1 243 testnick O %(hostmask)s * %(name)s
+:127.0.0.1 243 testnick O * * name
 
 === RPL_UMODEIS
 --- number: 221
@@ -736,17 +812,25 @@ __DATA__
 --- number: 234
 --- input
 +{
+    name => 'server.name',
+    server => 'server',
+    mask => '*',
+    type => '',
+    hopcount => 5,
+    info => 'info',
 }
 --- expected
-:127.0.0.1 234 testnick %(name)s %(server)s %(mask)s %(type)s %(hopcount)s %(info)s
+:127.0.0.1 234 testnick server.name server *  5 info
 
 === RPL_SERVLISTEND
 --- number: 235
 --- input
 +{
+    mask => '*',
+    type => '',
 }
 --- expected
-:127.0.0.1 235 testnick %(mask)s %(type)s :End of service listing
+:127.0.0.1 235 testnick *  :End of service listing
 
 === RPL_LUSERCLIENT
 --- number: 251
@@ -803,7 +887,7 @@ __DATA__
     server => 'server.name',
 }
 --- expected
-:127.0.0.1 256 testnick sever.name :Administrative info
+:127.0.0.1 256 testnick server.name :Administrative info
 
 === RPL_ADMINLOC1
 --- number: 257
@@ -994,9 +1078,11 @@ __DATA__
 --- number: 424
 --- input
 +{
+    file_op => 'open',
+    file => 'file',
 }
 --- expected
-:127.0.0.1 424 testnick :File error doing %(file_op)s on %(file)s
+:127.0.0.1 424 testnick :File error doing open on file
 
 === ERR_NONICKNAMEGIVEN
 --- number: 431

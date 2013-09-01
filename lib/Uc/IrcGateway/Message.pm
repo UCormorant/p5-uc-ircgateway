@@ -128,8 +128,8 @@ RPL_ENDOFWHOIS => {
 
 RPL_WHOISCHANNELS => {
     number => '319',
-    format => "%(nick)s :%{%(flag)s%(channel)s%{ %(flag)s%(channel)s}*}*",
-    trim_or_fileout => 1,
+    format => "%(nick)s :%(user_state)s%(channel)s%{ %(user_state)s%(channel)s}*",
+    trim_or_fileout => 0,
     information => $INFO{RPL_WHOISUSER},
 },
 
@@ -247,7 +247,7 @@ RPL_VERSION => {
 
 RPL_WHOREPLY => {
     number => '352',
-    format => "%(channel)s %(user)s %(host)s %(server)s %(nick)s, ( %{[H|G]} %{*}* %{[\@+]}* :%(hopcount)d %(realname)s",
+    format => "%(channel)s %(user)s %(host)s %(server)s %(nick)s %(user_state)s :%(hopcount)d %(realname)s",
     trim_or_fileout => 1,
     information => $INFO{RPL_WHOREPLY},
 },
@@ -261,8 +261,8 @@ RPL_ENDOFWHO => {
 
 RPL_NAMREPLY => {
     number => '353',
-    format => "%{[=*\@]}%(channel)s, :%{[\@+]}*%(nick)s%{ %{[\@+]}*%(nick)s}*",
-    trim_or_fileout => 1,
+    format => "%(channel_mode)s %(channel)s :%(user_state)s%(nick)s%{ %(user_state)s%(nick)s}*",
+    trim_or_fileout => 0,
     information => $INFO{RPL_NAMREPLY},
 },
 

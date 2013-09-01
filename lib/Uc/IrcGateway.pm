@@ -78,7 +78,7 @@ sub new {
     $self->{app_dir}->mkpath if not -e $self->{app_dir};
     $self->{motd}      = file($self->app_dir, ($self->{motd} || file($0)->basename =~ s/(.*)\.\w+$/$1.motd.txt/r));
 
-    $self->{handles}   = {};
+    $self->{handles}   = +{};
 
     # リプライメッセージの定義
     my $message_set = Uc::IrcGateway::Message->message_set;
@@ -294,7 +294,7 @@ sub handle_irc_msg {
 
 sub handle_ctcp_msg {
     my ($self, $handle, $raw, %opts) = @_;
-    my ($msg, $event) = {};
+    my ($msg, $event) = +{};
 
     @{$msg}{qw/command params/} = split(' ', $raw, 2);
     $msg->{params} = [$msg->{params}];
@@ -316,31 +316,37 @@ sub send_reply {
         $self->log($handle, error => "send_reply: $reply: connection not found");
         return;
     }
-    $self->log($handle, debug => "send_reply: $reply", $handle);
+    $self->log($handle, debug => "send_reply: $reply, ".to_json($msg->{response}), $handle);
 
     my $reply_set = $self->message_set->{$reply};
 
     die "message set '$reply' is not defined" if not defined $reply_set;
 
-    my ($args, @args) = inflated_sprintf($reply_set->{format}, $msg->{response});
-    if ($args ne '') {
-        @args = split / /, $args;
-        if (scalar @args != 1) {
-            my $index = 0;
-            for my $i (0..$#args) {
-                $index = $i;
-                last if $args[$i] =~ /^:/;
+    my $new_args = +{
+        format => $reply_set->{format},
+        maxbyte => ($reply_set->{trim_or_fileout} ? undef : $MAXBYTE-length($CRLF)),
+    };
+    for my $line (inflated_sprintf($new_args, $msg->{response})) {
+        my @args;
+        if ($line ne '') {
+            @args = split / /, $line;
+            if (scalar @args != 1) {
+                my $index = 0;
+                for my $i (0..$#args) {
+                    $index = $i;
+                    last if $args[$i] =~ /^:/;
+                }
+                $args[$index] .= join " ", '', splice @args, $index+1;
             }
-            $args[$index] .= join " ", '', splice @args, $index+1;
+            $args[-1] =~ s/^://;
         }
-        $args[-1] =~ s/^://;
+
+        my $reply_msg = mk_msg($self->to_prefix, $reply_set->{number}, ($handle->self->nick || '*'), @args);
+           $reply_msg = $self->trim_message($reply_msg) if $reply_set->{trim_or_fileout};
+
+        $self->log($handle, debug => "send_reply: $reply_msg");
+        $handle->push_write($self->codec->encode($reply_msg) . $CRLF);
     }
-
-    my $reply_msg = mk_msg($self->to_prefix, $reply_set->{number}, ($handle->self->nick || '*'), @args);
-       $reply_msg = $self->trim_message($reply_msg) if $reply_set->{trim_or_fileout};
-
-    $self->log($handle, debug => "send_reply: $reply_msg");
-    $handle->push_write($self->codec->encode($reply_msg) . $CRLF);
 }
 
 sub send_msg {
@@ -376,7 +382,7 @@ sub send_ctcp_reply {
 sub send_welcome {
     my ($self, $handle) = @_;
     my $user = $handle->self;
-    my $msg = { response => {
+    my $msg = +{ response => +{
         nick => $user->nick,
         user => $user->login,
         host => $user->host,

@@ -33,9 +33,9 @@ sub new {
         ircd => undef,
         schema => Uc::IrcGateway::Structure->new( dbh => setup_dbh() ),
 
-        options => {},
-        users => {},
-        channels => {},
+        options => +{},
+        users => +{},
+        channels => +{},
 
         registered => 0,
 

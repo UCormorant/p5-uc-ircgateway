@@ -60,7 +60,7 @@ sub register {
         $user = $handle->set_user($self->user_prop);
     }
     $handle->self($user);
-    map { $_->part_users($handle->self->login) } $handle->get_channels($handle->self->channels);
+    map { $_->part_users($handle->self->login) } $handle->self->channels;
 
     $user;
 }

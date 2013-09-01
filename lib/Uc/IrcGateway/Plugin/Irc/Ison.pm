@@ -30,8 +30,7 @@ sub action {
         push @users, $nick if $handle->has_user($nick);
     }
 
-    # TODO: inflated_sprintf format
-    $msg->{response}{nick} = join ", ", @users;
+    $msg->{response}{nick} = \@users;
 
     $self->run_hook('irc.ison.before_reply' => \@_);
     $self->send_reply( $handle, $msg, 'RPL_ISON' );

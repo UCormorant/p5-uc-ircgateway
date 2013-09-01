@@ -45,11 +45,13 @@ sub action {
     my $chans = $msg->{params}[0] || join ',', sort $handle->channel_list;
     for my $channel ($handle->get_channels(split /,/, $chans)) {
         next unless $channel;
+        # TODO: 自分がチャンネルメンバーの場合は表示する
+        next if $channel->private or $channel->secret;
         $msg->{response} = {};
         $msg->{response}{channel} = $channel->name;
         $msg->{response}{topic}   = $channel->topic;
-        $msg->{response}{member_count} = scalar $channel->login_list;
-        $self->send_reply( $handle, $msg,  'RPL_LIST' );
+        $msg->{response}{visible} = scalar $channel->login_list;
+        $self->send_reply( $handle, $msg, 'RPL_LIST' );
 
         push @{$msg->{success}}, $msg->{response};
     }

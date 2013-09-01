@@ -10,15 +10,16 @@ sub new {
 sub channels { # has_many
     local $_;
     my $self = shift;
-    map { $_->c_name } $self->{teng}->search('channel_user', { u_login => $self->login, @_ });
+    my @channels = map { $_->c_name } $self->{teng}->search('channel_user', { u_login => $self->login, @_ });
+    $self->{teng}->search('channel', { name => \@channels });
 }
 
-sub operator_channles { # has_many
+sub operator_channels { # has_many
     my $self = shift;
     $self->channels( operator => 1, @_ );
 }
 
-sub speaker_channles { # has_many
+sub speaker_channels { # has_many
     my $self = shift;
     $self->channels( speaker => 1, @_ );
 }

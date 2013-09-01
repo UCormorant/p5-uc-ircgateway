@@ -39,27 +39,26 @@ sub action {
 
         my $c = $handle->get_channels($chan);
         my $c_mode = $c->secret ? '@' : $c->private ? '*' : '=';
-        my $m_chan = $c_mode.' '.$chan;
 
-        my $users = '';
-        my @users_list = ();
-        my $users_test = mk_msg($self->to_prefix, RPL_NAMREPLY, $handle->self->nick, $m_chan, '');
-        for my $nick (sort $c->nick_list) {
-            next unless $handle->has_nick($nick);
-            my $u_login = $handle->lookup($nick);
-            my $u_mode = $c->is_operator($u_login) ? '@' : $c->is_speaker($u_login) ? '+' : '';
-            my $m_nick = $u_mode.$nick;
-            if (length "$users_test$users$m_nick$CRLF" > $MAXBYTE) {
-                chop $users;
-                push @users_list, $users;
-                $users = '';
-            }
-            $users .= "$m_nick ";
+        my @users_list;
+        for my $user ($c->users) {
+            my $u_login = $user->login;
+            my $u_state = $c->is_operator($u_login) ? '@' : $c->is_speaker($u_login) ? '+' : '';
+            push @users_list, [$user->nick, $u_state];
         }
-        push @users_list, $users if chop $users;
 
-        $self->send_msg( $handle, RPL_NAMREPLY, $m_chan, $_ ) for @users_list;
-        $self->send_msg( $handle, RPL_ENDOFNAMES, $chan, 'End of /NAMES list' );
+        $msg->{response} = {};
+        $msg->{response}{channel} = $chan;
+        $msg->{response}{channel_mode} = $c_mode;
+        $msg->{response}{nick} = [];
+        $msg->{response}{user_state} = [];
+        map {
+            push @{$msg->{response}{nick}},      $_->[0];
+            push @{$msg->{response}{user_state}}, $_->[1];
+        } sort { $a->[0] cmp $b->[0] } @users_list;
+
+        $self->send_reply( $handle, $msg, 'RPL_NAMREPLY' );
+        $self->send_reply( $handle, $msg, 'RPL_ENDOFNAMES' );
     }
 
     $self->run_hook('irc.names.finish' => \@_);

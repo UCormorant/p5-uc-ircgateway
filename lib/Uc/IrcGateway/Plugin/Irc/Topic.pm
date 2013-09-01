@@ -31,8 +31,12 @@ sub action {
 
     return unless $self->check_channel( $handle, $msg->{response}{channel}, enable => 1 );
 
+    my $channel = $handle->get_channels($msg->{response}{channel});
+
     if ($msg->{params}[1]) {
-        $msg->{response}{topic} = $handle->get_channels($msg->{response}{channel})->topic( $msg->{params}[1] );
+        $msg->{response}{topic} = $msg->{params}[1];
+        $channel->topic( $msg->{response}{topic} );
+        $channel->update;
 
         # send topic message
         $self->send_cmd( $handle, $msg->{response}{prefix}, 'TOPIC', @{$msg->{response}}{qw/channel topic/} );
@@ -41,7 +45,7 @@ sub action {
         $self->send_reply( $handle, $msg, 'RPL_NOTOPIC' );
     }
     else {
-        $msg->{response}{topic} = $handle->get_channels($msg->{response}{channel})->topic;
+        $msg->{response}{topic} = $channel->topic;
         $self->send_reply( $handle, $msg, 'RPL_TOPIC' );
     }
 

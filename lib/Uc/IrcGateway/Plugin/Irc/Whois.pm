@@ -31,26 +31,30 @@ sub action {
     for my $user ($handle->get_users_by_nicks(@nick_list)) {
         next unless $user;
 
-        my $channels = '';
-        my @channel_list = ();
-        my $channels_test = mk_msg($self->to_prefix, RPL_WHOISCHANNELS, $user->nick, '');
-        for my $chan ($handle->who_is_channels($user->login)) {
-            if (length "$channels_test$channels$chan$CRLF" > $MAXBYTE) {
-                chop $channels;
-                push @channel_list, $channels;
-                $channels = '';
-            }
-            $channels .= "$chan ";
-        }
-        push @channel_list, $channels if chop $channels;
+        $msg->{response} = {};
+        $msg->{response}{nick} = $user->nick;
+        $msg->{response}{user} = $user->login;
+        $msg->{response}{host} = $user->host;
+        $msg->{response}{realname} = $user->realname;
+        $msg->{response}{server} = $user->server;
+        $msg->{response}{server_info} = $user->server;
+        $msg->{response}{idle} = time - $user->last_modified;
+        $msg->{response}{away_message} = $user->away_message;
 
-        $self->send_msg( $handle, RPL_AWAY, $user->nick, $user->away_message ) if $user->away;
-        $self->send_msg( $handle, RPL_WHOISUSER, $user->nick, $user->login, $user->host, '*', $user->realname );
-        $self->send_msg( $handle, RPL_WHOISSERVER, $user->nick, $user->server, $user->server );
-        $self->send_msg( $handle, RPL_WHOISOPERATOR, $user->nick, 'is an IRC operator' ) if $user->operator;
-        $self->send_msg( $handle, RPL_WHOISIDLE, $user->nick, time - $user->last_modified, 'seconds idle' );
-        $self->send_msg( $handle, RPL_WHOISCHANNELS, $user->nick, $_ ) for @channel_list;
-        $self->send_msg( $handle, RPL_ENDOFWHOIS, $user->nick, 'End of /WHOIS list' );
+        my $u_login = $user->login;
+        for my $c ($user->channels) {
+            my $u_state = $c->is_operator($u_login) ? '@' : $c->is_speaker($u_login) ? '+' : '';
+            push @{$msg->{response}{channel}},      $c->name;
+            push @{$msg->{response}{user_state}}, $u_state;
+        }
+
+        $self->send_reply( $handle, $msg, 'RPL_AWAY' ) if $user->away;
+        $self->send_reply( $handle, $msg, 'RPL_WHOISUSER' );
+        $self->send_reply( $handle, $msg, 'RPL_WHOISSERVER' );
+        $self->send_reply( $handle, $msg, 'RPL_WHOISOPERATOR' ) if $user->operator;
+        $self->send_reply( $handle, $msg, 'RPL_WHOISIDLE' );
+        $self->send_reply( $handle, $msg, 'RPL_WHOISCHANNELS' );
+        $self->send_reply( $handle, $msg, 'RPL_ENDOFWHOIS' );
     }
 
     $self->run_hook('irc.whois.finish' => \@_);
