@@ -25,18 +25,27 @@ sub action {
 
     $self->run_hook('irc.kick.start' => \@_);
 
-    for my $channel (split /,/, $msg->{params}[0]) {
+    my @channels = grep { $_ } split /,/, $msg->{params}[0];
+    my @users    = grep { $_ } split /,/, $msg->{params}[1];
+
+    for my $channel (@channels) {
         next unless $self->check_channel( $handle, $channel, joined => 1, operator => 1 );
 
 #           ERR_BADCHANMASK
 
-        for my $user ($handle->get_users(grep { $_ } split /,/, $msg->{params}[1]) // ()) {
+        my @nick_list = map { $self->check_user( $handle, $_ ) ? $_ : () } @users;
+
+        for my $user ($handle->get_users_by_nicks(@nick_list)) {
+            next unless $user;
+
             $msg->{response} = {};
             $msg->{response}{channel} = $channel;
             $msg->{response}{nick}    = $user->nick;
             $msg->{response}{comment} = $msg->{params}[2] // undef;
+            $msg->{response}{target_channel} = $handle->get_channels($channel);
+            $msg->{response}{target_user} = $user;
 
-            if (not $user->channels(c_name => $channel)) {
+            if (not $msg->{response}{target_user}->channels(c_name => $msg->{response}{channel})) {
                 $self->send_reply( $handle, $msg, 'ERR_USERNOTINCHANNEL' );
                 next;
             }
@@ -44,7 +53,7 @@ sub action {
             $self->run_hook('irc.part.before_part_channel' => \@_);
 
             # part user
-            $handle->get_channels($channel)->part_users($user->login);
+            $msg->{response}{target_channel}->part_users($user->login);
 
             $self->run_hook('irc.part.before_command' => \@_);
 

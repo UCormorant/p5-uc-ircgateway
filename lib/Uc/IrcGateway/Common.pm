@@ -78,8 +78,54 @@ sub decorate_text {
 sub replace_crlf { $_[0] =~ s/[\r\n]+/ /gr; }
 
 sub to_json {
-    state $JSON = JSON->new->pretty;
+    state $JSON = JSON->new->pretty->allow_blessed;
     $JSON->encode(+shift) =~ s/$REGEX{chomp}//r;
 }
 
-1;
+1; # Magic true value required at end of module
+__END__
+
+=encoding utf8
+
+=head1 NAME
+
+Uc::IrcGateway::Common - Utilities for Uc::IrcGateway
+
+
+=head1 SYNOPSIS
+
+    use Uc::IrcGateway::Common;
+
+
+=head1 DESCRIPTION
+
+
+=head1 INTERFACE
+
+
+=head1 BUGS AND LIMITATIONS
+
+Please report any bugs or feature requests to
+L<https://github.com/UCormorant/p5-uc-ircgateway/issues>
+
+
+=head1 SEE ALSO
+
+=over
+
+=item L<Uc::IrcGateway>
+
+=back
+
+
+=head1 AUTHOR
+
+U=Cormorant  C<< <u@chimata.org> >>
+
+
+=head1 LICENCE AND COPYRIGHT
+
+Copyright (c) 2011-2013, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
+
+This module is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself. See L<perlartistic>.

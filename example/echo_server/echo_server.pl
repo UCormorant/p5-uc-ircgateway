@@ -22,7 +22,6 @@ package EchoServer::Plugin::Echo {
 
     use parent 'Class::Component::Plugin';
     use Uc::IrcGateway::Common;
-    use Data::Dumper;
 
     sub echo :Hook('irc.privmsg.finish') {
         my ($hook, $self, $args) = @_;

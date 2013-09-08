@@ -5,13 +5,13 @@ requires 'AnyEvent::IRC', '0.6';
 requires 'Path::Class', '0.29';
 requires 'YAML';
 requires 'JSON';
-requires 'Teng', '0.20';
+requires 'Teng', '0.17';
 requires 'DBD::SQLite', '1.027';
 requires 'Log::Dispatch', '2.36';
 requires 'Class::Accessor::Lite';
 
-requires 'Text::InflateSprintf', '0.04';
-requires 'Teng::Plugin::DBIC::ResultSet', '0.03';
+requires 'Text::InflatedSprintf', '0.04';
+requires 'Teng::Plugin::DBIC::ResultSet', 'v0.03';
 
 on build => sub {
     requires 'Test::Base::Less', '0.11';

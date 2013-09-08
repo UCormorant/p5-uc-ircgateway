@@ -5,7 +5,17 @@ use utf8;
 
 use YAML qw(Load);
 
-my %INFO = %{Load(do { local $/; my $return = <DATA>; close DATA; $return; })};
+my %INFO = %{Load(do {
+    local $_;
+    my @return;
+    while (<DATA>) {
+        chomp;
+        last if /^__END__$/;
+        push @return, $_;
+    }
+    close DATA;
+    join "\n", @return;
+})};
 sub message_set { +{
 
 #5. Replies
@@ -1560,3 +1570,49 @@ ERR_USERSDONTMATCH: |+
   Error sent to any user trying to view or change the
   user mode for a user other than themselves.
 
+__END__
+
+=encoding utf8
+
+=head1 NAME
+
+Uc::IrcGateway::Message - Define RPL_* and ERR_* for reply messages
+
+
+=head1 SYNOPSIS
+
+    use Uc::IrcGateway::Message;
+
+
+=head1 DESCRIPTION
+
+
+=head1 INTERFACE
+
+
+=head1 BUGS AND LIMITATIONS
+
+Please report any bugs or feature requests to
+L<https://github.com/UCormorant/p5-uc-ircgateway/issues>
+
+
+=head1 SEE ALSO
+
+=over
+
+=item L<Uc::IrcGateway>
+
+=back
+
+
+=head1 AUTHOR
+
+U=Cormorant  C<< <u@chimata.org> >>
+
+
+=head1 LICENCE AND COPYRIGHT
+
+Copyright (c) 2011, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
+
+This module is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself. See L<perlartistic>.

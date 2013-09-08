@@ -1,9 +1,10 @@
 use utf8;
 use strict;
-use Test::More tests => 163;
+use Test::Base::Less;
 use Test::TCP;
 use Test::Difflet qw(is_deeply);
-use Test::Base::Less;
+
+plan tests => 163;
 
 use t::Util;
 use Uc::IrcGateway;

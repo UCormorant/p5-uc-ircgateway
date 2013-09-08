@@ -47,6 +47,8 @@ sub action {
             # TODO: s,p and channel menber
             my $c_name = $channel->name;
             for my $u ($channel->users) {
+                next unless $u;
+
                 my $u_login = $u->login;
                 my $u_state = $u->away ? 'G' : 'H';
                 $u_state .= "*" if $u->operator; # server operator

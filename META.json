@@ -27,7 +27,7 @@
    "prereqs" : {
       "build" : {
          "requires" : {
-            "Test::Base::Less" : "0",
+            "Test::Base::Less" : "0.11",
             "Test::Difflet" : "0",
             "Test::More" : "0.94",
             "Test::TCP" : "0"
@@ -52,17 +52,15 @@
          "requires" : {
             "AnyEvent" : "7.04",
             "AnyEvent::IRC" : "0.6",
-            "AnyEvent::Twitter" : "0",
-            "AnyEvent::Twitter::Stream" : "0",
-            "Clone" : "0",
-            "Config::Pit" : "0",
-            "DateTime::Format::DateParse" : "0",
-            "HTML::Entities" : "0",
+            "Class::Accessor::Lite" : "0",
+            "Class::Component" : "0.17",
+            "DBD::SQLite" : "1.027",
+            "JSON" : "0",
             "Log::Dispatch" : "2.36",
-            "Net::Twitter::Lite" : "0",
             "Path::Class" : "0.29",
-            "Text::InflateSprintf" : "0.04",
-            "Uc::Model::Twitter" : "1.00",
+            "Teng" : "0.17",
+            "Teng::Plugin::DBIC::ResultSet" : "v0.3.0",
+            "Text::InflatedSprintf" : "0.04",
             "YAML" : "0",
             "perl" : "5.014"
          }
