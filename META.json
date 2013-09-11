@@ -67,6 +67,17 @@
       }
    },
    "release_status" : "unstable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/UCormorant/p5-uc-ircgateway/issues"
+      },
+      "homepage" : "https://github.com/UCormorant/p5-uc-ircgateway",
+      "repository" : {
+         "type" : "git",
+         "url" : "git://github.com/UCormorant/p5-uc-ircgateway.git",
+         "web" : "https://github.com/UCormorant/p5-uc-ircgateway"
+      }
+   },
    "version" : "v3.0.0",
    "x_contributors" : [
       "U=Cormorant <u@chimata.org>"
