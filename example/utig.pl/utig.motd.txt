@@ -1,6 +1,6 @@
-Version 2.1.2
+Version 3.0.0
 
-Twitter API v1.1 対応
+use Class::Component
 
 Uc::IrcGateway 作りこみ計画
     ゲートウェイサーバ基底クラスとしての完成度上げたい
@@ -10,9 +10,11 @@ Uc::IrcGateway 作りこみ計画
         タイマーイベント
         ログ
         テスト
-    各種コマンド対応
-        残: pass, invite, kick, mode
+    各種コマンド完成
+        残: pass, mode, names, ping, pong, privmsg, who, whois
+    各コマンドのマスク機能(そのうち)
     設定を gatewaybot と対話で出来るようにしてはどうか
+    memo: プラガブルにしてロガーつけてデータベース使いだしたらメモリ消費7MB増
 
 TODO:
     join したチャンネルに発言が流れる仕様
@@ -20,8 +22,8 @@ TODO:
     →→自分の発言はtopicなので流れない
     →→自分を含むリストにも一切流れない
     いずれなおす
+    ctcp_action と MySQL の連携 -> した
+    → retweet の取り消しできてない
     on_event と MySQL の連携
     Twitterアカウントのデータ更新
-    utig.pl もうちょっと小さくしたい
     → 小さくするつもりが100行以上増えててワロタ
-    no Moose -> した

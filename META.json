@@ -1,0 +1,74 @@
+{
+   "abstract" : "ãã©ã¬ãã«ãªãªã¬ãªã¬IRCã²ã¼ãã¦ã§ã¤åºåºã¯ã©ã¹",
+   "author" : [
+      "U=Cormorant  C<< <u@chimata.org> >>"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "Minilla/v0.5.6, CPAN::Meta::Converter version 2.130880",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "Uc-IrcGateway",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "inc",
+         "share",
+         "eg",
+         "examples",
+         "author"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "Test::Base::Less" : "0.11",
+            "Test::Difflet" : "0",
+            "Test::More" : "0.94",
+            "Test::TCP" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "CPAN::Meta" : "0",
+            "CPAN::Meta::Prereqs" : "0",
+            "Module::Build" : "0.38"
+         }
+      },
+      "develop" : {
+         "requires" : {
+            "Test::CPAN::Meta" : "0",
+            "Test::MinimumVersion" : "0.10108",
+            "Test::Pod" : "1.41",
+            "Test::Spellunker" : "v0.2.7"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "AnyEvent" : "7.04",
+            "AnyEvent::IRC" : "0.6",
+            "Class::Accessor::Lite" : "0",
+            "Class::Component" : "0.17",
+            "DBD::SQLite" : "1.027",
+            "JSON" : "0",
+            "Log::Dispatch" : "2.36",
+            "Path::Class" : "0.29",
+            "Teng" : "0.17",
+            "Teng::Plugin::DBIC::ResultSet" : "v0.3.0",
+            "Text::InflatedSprintf" : "0.04",
+            "YAML" : "0",
+            "perl" : "5.014"
+         }
+      }
+   },
+   "release_status" : "unstable",
+   "version" : "v3.0.0",
+   "x_contributors" : [
+      "U=Cormorant <u@chimata.org>"
+   ]
+}
