@@ -28,18 +28,9 @@ sub action {
     my ($mask, $oper) = @{$msg->{params}};
     my @channels;
 
-    # TODO: いまのところ channel, nick の完全一致チェックしにか対応してません
-    if (!$mask || $mask eq '0') {
-        @channels = grep {
-            not $self->check_channel($handle, $_, joined => 1, silent => 1);
-        } $handle->channel_list;
-        @channels = $handle->get_channels(@channels);
-    }
-    elsif ($handle->has_channel($mask)) {
+    # TODO: mask, IRC Operator
+    if (is_valid_channel_name($mask) and $handle->has_channel($mask)) {
         @channels = $handle->get_channels($mask);
-    }
-    else {
-        @channels = ();
     }
 
     if (scalar @channels) {
@@ -74,7 +65,7 @@ sub action {
         $msg->{response} = {};
         $msg->{response}{name} = $name;
 
-        my $u = $handle->get_users($mask);
+        my $u = $handle->get_users_by_nicks($mask);
         if ($u) {
             my $u_state = $u->away ? 'G' : 'H';
             $u_state .= "*" if $u->operator; # server operator

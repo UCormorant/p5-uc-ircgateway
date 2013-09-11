@@ -25,6 +25,8 @@ sub action {
 
     $self->run_hook('irc.ping.start' => \@_);
 
+    $self->send_msg( $handle, 'PONG', $self->servername );
+
     $self->run_hook('irc.ping.finish' => \@_);
 }
 

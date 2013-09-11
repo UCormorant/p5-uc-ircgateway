@@ -56,14 +56,14 @@ CREATE TABLE 'user' (
   'login'          text NOT NULL,
   'nick'           text NOT NULL,
   'password'       text NOT NULL DEFAULT '',
-  'realname'       text NOT NULL DEFAULT '',
+  'realname'       text NOT NULL DEFAULT '*',
   'host'           text NOT NULL DEFAULT 'localhost',
-  'addr'           text NOT NULL DEFAULT '',
-  'server'         text NOT NULL DEFAULT '',
+  'addr'           text NOT NULL DEFAULT '*',
+  'server'         text NOT NULL DEFAULT 'localhost',
 
   'userinfo'       text,
   'away_message'   text,
-  'last_modified'  int,
+  'last_modified'  int NOT NULL DEFAULT (strftime('%s', 'now')),
 
   'away'           boolean NOT NULL DEFAULT 0,
   'invisible'      boolean NOT NULL DEFAULT 0,

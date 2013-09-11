@@ -54,10 +54,16 @@ sub action {
             }
         }
         elsif (is_valid_channel_name($target)) {
+            if (not $self->check_channel($handle, $target, enable => 1, silent => 1)) {
+                $msg->{response}{nick} = $target;
+                $self->send_reply( $handle, $msg, 'ERR_NOSUCHNICK' ) if not $notice;
+                next;
+            }
             if (0) { # check mode
                 # ERR_CANNOTSENDTOCHAN <channel name> :Cannot send to channel
                 next;
             }
+            $msg->{response}{channel} = $target;
             $msg->{response}{target_is_channel} = 1;
         }
         elsif (not $self->check_user($handle, $target, silent => $notice)) {
@@ -65,6 +71,7 @@ sub action {
         }
         else {
             my $user = $handle->get_users_by_nicks($target);
+            $msg->{response}{nick} = $user->nick;
             $msg->{response}{away_message} = $user->away_message;
             $self->send_reply( $handle, $msg, 'RPL_AWAY' ) if $user->away;
             $msg->{response}{target_is_user} = 1;

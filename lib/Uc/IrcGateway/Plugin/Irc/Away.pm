@@ -25,7 +25,7 @@ sub action {
 
     $self->run_hook('irc.away.start' => \@_);
 
-    $msg->{response}{text} = $msg->{params}[0];
+    $msg->{response}{text} = $msg->{params}[0] // '';
     $handle->self->away($msg->{response}{text} eq '' ? 0 : 1);
     $handle->self->away_message($msg->{response}{text});
 

@@ -44,7 +44,7 @@ sub action {
         my $u_login = $user->login;
         for my $c ($user->channels) {
             my $u_state = $c->is_operator($u_login) ? '@' : $c->is_speaker($u_login) ? '+' : '';
-            push @{$msg->{response}{channel}},      $c->name;
+            push @{$msg->{response}{channel}},    $c->name;
             push @{$msg->{response}{user_state}}, $u_state;
         }
 
@@ -53,7 +53,7 @@ sub action {
         $self->send_reply( $handle, $msg, 'RPL_WHOISSERVER' );
         $self->send_reply( $handle, $msg, 'RPL_WHOISOPERATOR' ) if $user->operator;
         $self->send_reply( $handle, $msg, 'RPL_WHOISIDLE' );
-        $self->send_reply( $handle, $msg, 'RPL_WHOISCHANNELS' );
+        $self->send_reply( $handle, $msg, 'RPL_WHOISCHANNELS' ) if exists $msg->{response}{channel};
         $self->send_reply( $handle, $msg, 'RPL_ENDOFWHOIS' );
     }
 
