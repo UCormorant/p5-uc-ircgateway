@@ -13,7 +13,7 @@ requires 'Class::Accessor::Lite';
 requires 'Text::InflatedSprintf', '0.04';
 requires 'Teng::Plugin::DBIC::ResultSet', 'v0.03';
 
-on build => sub {
+on 'test' => sub {
     requires 'Test::Base::Less', '0.11';
     requires 'Test::Difflet';
     requires 'Test::More', '0.94';
