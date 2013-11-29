@@ -58,8 +58,10 @@ sub action {
     elsif ($handle->self->login) {
         # finish register user
         $user->nick($msg->{response}{nick});
+        $self->run_hook('irc.nick.before_register' => \@_);
         $user->register($handle);
         $msg->{registered} = 1;
+        $self->run_hook('irc.nick.after_register' => \@_);
         $self->send_welcome( $handle );
     }
     else {

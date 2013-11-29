@@ -28,6 +28,14 @@ sub to_prefix {
     sprintf "%s!%s@%s", $_[0]->nick, $_[0]->login, $_[0]->host;
 }
 
+sub part_from_all_channels {
+    my $self = shift;
+    for my $channel ($self->channels) {
+        $channel->part_users($self->login);
+    }
+    $self;
+}
+
 
 1; # Magic true value required at end of module
 __END__
