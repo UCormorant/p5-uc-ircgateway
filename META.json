@@ -79,7 +79,7 @@
          "web" : "https://github.com/UCormorant/p5-uc-ircgateway"
       }
    },
-   "version" : "v3.0.0",
+   "version" : "v3.0.1",
    "x_contributors" : [
       "U=Cormorant <u@chimata.org>"
    ]

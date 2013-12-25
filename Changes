@@ -2,6 +2,25 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.0.1 2013-12-25T17:20:59Z
+
+    - add hook point
+
+        - irc.nick.before_register
+        - irc.nick.after_register
+        - irc.names.before_register
+        - irc.names.after_register
+
+    - add "$user->part_from_all_channels"
+
+    - bugfix: motd lines (RPL_MOTD) are not printed
+
+    - replace 'motd' option with 'motd_file' and 'motd_text'
+
+        - motd_file: pass a file path
+        - motd_text: pass utf8-flagged string
+        - 'motd_text' is preferred over 'motd_file'
+
 v3.0.0 2013-09-11T17:46:02Z
 
     - Many things happened.
