@@ -1,4 +1,4 @@
-package Uc::IrcGateway v3.0.0;
+package Uc::IrcGateway v3.0.1;
 use 5.014;
 use parent qw(Class::Component Object::Event);
 use Uc::IrcGateway::Common;
@@ -19,7 +19,8 @@ use Class::Accessor::Lite (
         servername
         gatewayname
 
-        motd
+        motd_file
+        motd_text
         app_dir
         ping_timeout
     )],
@@ -64,6 +65,8 @@ sub new {
     $self->{ping_timeout} //= 30;
     $self->{charset}      //= 'utf8';
     $self->{err_charset}  //= $^O eq 'MSWin32' ? 'cp932' : 'utf8';
+    $self->{motd_file}    //= file($0)->basename =~ s/(.*)\.\w+$/$1.motd.txt/r;
+    $self->{motd_text}    //= undef;
 
     $self->{message_set}  //= {};
 
@@ -76,7 +79,8 @@ sub new {
 
     $self->{app_dir}   = $self->{app_dir} ? dir($self->{app_dir}) : $self->default_app_dir();
     $self->{app_dir}->mkpath if not -e $self->{app_dir};
-    $self->{motd}      = file($self->app_dir, ($self->{motd} || file($0)->basename =~ s/(.*)\.\w+$/$1.motd.txt/r));
+    $self->{motd_file} = file($self->app_dir, $self->{motd_file});
+    chomp $self->{motd_text} if defined $self->{motd_text};
 
     $self->{handles}   = +{};
 
@@ -192,7 +196,7 @@ sub run {
         say "   - Server time zone is @{[ $self->time_zone ]}";
         say "   - Gateway bot is @{[ $self->gatewayname ]}";
         say "   - Setting files are in @{[ $self->app_dir ]}";
-        say "   - Message Of The Day uses @{[ scalar $self->motd ]}";
+        say "   - Message Of The Day uses @{[ $self->motd_text ? 'raw text' : scalar $self->motd_file ]}";
 
         if ($self->debug) {
             say "IRC/CTCP command list:" ;
@@ -511,7 +515,7 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version v3.0.0
+This document describes Uc::IrcGateway version v3.0.1
 
 
 =head1 SYNOPSIS

@@ -27,7 +27,9 @@ subtest 'new' => sub {
         servername => 'UcIrcServer',
         gatewayname => '*bot',
         app_dir => $app_dir,
-        motd => 'motd.txt',
+        motd_file => 'motd.txt',
+        motd_text => 'hogefuga',
+
         ping_timeout => 10,
         charset => 'euc-jp',
         err_charset => 'cp932',
@@ -42,7 +44,8 @@ subtest 'new' => sub {
 
     can_ok($ircd, qw(
         host port time_zone
-        servername gatewayname motd
+        servername gatewayname
+        motd_file motd_text
         ping_timeout to_prefix
         charset err_charset
         codec err_codec
@@ -56,7 +59,8 @@ subtest 'new' => sub {
     is($ircd->servername, scalar hostname(), 'check servername');
     like($ircd->gatewayname, qr/^\S+$/, 'check gatewayname');
     isa_ok($ircd->app_dir, 'Path::Class::Dir', 'check app_dir');
-    isa_ok($ircd->motd, 'Path::Class::File', 'check motd');
+    isa_ok($ircd->motd_file, 'Path::Class::File', 'check motd_file');
+    is($ircd->motd_text, undef, 'check motd_text');
     ok(defined $ircd->ping_timeout, 'check ping_timeout');
     is($ircd->to_prefix, $ircd->host, 'check to_prefix');
     ok(defined $ircd->charset, 'check charset');
@@ -72,7 +76,8 @@ subtest 'new' => sub {
         is($ircd->servername, $args{servername}, 'check servername');
         is($ircd->gatewayname, $args{gatewayname}, 'check gatewayname');
         is($ircd->app_dir->stringify, dir($args{app_dir})->stringify, 'check app_dir');
-        is($ircd->motd->stringify, file($args{app_dir}, $args{motd})->stringify, 'check motd');
+        is($ircd->motd_file->stringify, file($args{app_dir}, $args{motd_file})->stringify, 'check motd_file');
+        is($ircd->motd_text, 'hogefuga', 'check motd_text');
         is($ircd->ping_timeout, $args{ping_timeout}, 'check ping_timeout');
         is($ircd->to_prefix, $ircd->host, 'check to_prefix');
         is($ircd->charset, $args{charset}, 'check charset');

@@ -29,22 +29,32 @@ sub action {
     $msg->{response}{servername} = $self->servername;
 
     my $missing = 1;
-    if (-e $self->motd) {
-        my $fh = $self->motd->open("<:encoding(@{[$self->charset]})");
+    my @motd_lines;
+    if (defined $self->motd_text) {
+        $missing = 0;
+        push @motd_lines, split qr{$/}, $self->motd_text;
+    }
+    elsif (-e $self->motd_file) {
+        my $fh = $self->motd_file->open("<:encoding(@{[$self->charset]})");
         if (defined $fh) {
             $missing = 0;
-            $self->send_reply( $handle, $msg, 'RPL_MOTDSTART' );
-            my $i = 0;
             while (my $line = $fh->getline) {
                 chomp $line;
-                $msg->{response}{line} = $line;
-                $self->send_reply( $handle, $msg, 'RPL_MOTD' );
+                push @motd_lines, $line;
             }
-            $self->send_reply( $handle, $msg, 'RPL_ENDOFMOTD' );
         }
     }
+
     if ($missing) {
         $self->send_reply( $handle, $msg, 'ERR_NOMOTD' );
+    }
+    else {
+        $self->send_reply( $handle, $msg, 'RPL_MOTDSTART' );
+        for my $line (@motd_lines) {
+            $msg->{response}{text} = $line;
+            $self->send_reply( $handle, $msg, 'RPL_MOTD' );
+        }
+        $self->send_reply( $handle, $msg, 'RPL_ENDOFMOTD' );
     }
 
     $self->run_hook('irc.motd.finish' => \@_);
