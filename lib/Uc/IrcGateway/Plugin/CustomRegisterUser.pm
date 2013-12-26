@@ -20,6 +20,12 @@ exapmle:
         $self->run_hook('before_register_user' => \@_);
         $user->register($handle);
         $self->run_hook('after_register_user' => \@_);
+
+        $self->log($handle, info => sprintf "handle{%s} is registered as '%s'",
+            Scalar::Util::refaddr($handle),
+            $handle->self->to_prefix,
+        );
+
         $self->send_welcome($handle);
         return 1;
     }
