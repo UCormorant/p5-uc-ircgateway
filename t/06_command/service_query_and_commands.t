@@ -8,11 +8,10 @@ use Test::Difflet qw(is_deeply);
 use t::Util;
 use Uc::IrcGateway;
 use Uc::IrcGateway::Common;
-Uc::IrcGateway->load_plugins(qw/DefaultSet/);
+Uc::IrcGateway->load_plugins(qw/DefaultSet AutoRegisterUser/);
 
 use AnyEvent::IRC::Client ();
 use AE ();
-use Data::Dumper qw(Dumper);
 
 SKIP: {
     skip "service commands are not implemented yet", 1;

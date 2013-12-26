@@ -8,7 +8,7 @@ use Test::Difflet qw(is_deeply);
 use t::Util;
 use Uc::IrcGateway;
 use Uc::IrcGateway::Common;
-Uc::IrcGateway->load_plugins(qw/DefaultSet/);
+Uc::IrcGateway->load_plugins(qw/DefaultSet AutoRegisterUser/);
 Uc::IrcGateway->load_plugins(qw/+Mock::Plugin::UserBasedQueries/);
 
 use AnyEvent::IRC::Client ();
@@ -67,7 +67,7 @@ test_tcp(
 
             error => sub {
                 my ($conn, $code, $message, $ircmsg) = @_;
-                diag("$code: $message, ". Dumper($ircmsg)) if $code != 422;
+                diag("$code: $message, ". explain $ircmsg) if $code != 422;
             },
         );
         $conn->connect(

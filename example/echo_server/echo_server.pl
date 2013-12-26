@@ -14,7 +14,12 @@ package EchoServer {
     use warnings qw(utf8);
 
     use parent 'Uc::IrcGateway';
-    __PACKAGE__->load_plugins(qw/DefaultSet Echo Log::Notice4Handle/);
+    __PACKAGE__->load_plugins(qw/
+        DefaultSet
+        AutoRegisterUser
+        Log::Notice4Handle
+        Echo
+    /);
 }
 
 package EchoServer::Plugin::Echo {

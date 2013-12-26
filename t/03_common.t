@@ -6,8 +6,6 @@ use Test::Difflet qw(is_deeply);
 use t::Util;
 use Uc::IrcGateway::Common;
 
-use Data::Dumper qw(Dumper);
-
 subtest 'import elements' => sub {
     our ($MAXBYTE, $NUL, $BELL, $CRLF, $SPECIAL, $SPCRLFCL, %REGEX);
     ok($MAXBYTE, '$MAXBYTE');

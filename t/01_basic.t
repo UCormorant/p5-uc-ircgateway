@@ -7,14 +7,12 @@ use Test::Difflet qw(is_deeply);
 use t::Util;
 use Uc::IrcGateway;
 use Uc::IrcGateway::Common;
-Uc::IrcGateway->load_plugins(qw/DefaultSet/);
 
 use IO::Socket::INET ();
 use Sys::Hostname qw(hostname);
 use AnyEvent::IRC::Client ();
 use AE ();
 use Path::Class qw(dir file);
-use Data::Dumper qw(Dumper);
 
 my $app_dir = tempdir(CLEANUP => 1);
 

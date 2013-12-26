@@ -43,11 +43,8 @@ sub action {
     $user->server($server);
 
     if ($user->nick) {
-        $self->run_hook('irc.user.before_register' => \@_);
-        $user->register($handle);
-        $msg->{registered} = 1;
-        $self->run_hook('irc.user.after_register' => \@_);
-        $self->send_welcome( $handle );
+        # finish register user
+        $msg->{registered} = $self->register_user($handle, $user);
     }
 
     $self->run_hook('irc.user.finish' => \@_);

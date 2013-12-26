@@ -1,7 +1,8 @@
-package Uc::IrcGateway v3.0.1;
+package Uc::IrcGateway v3.1.0;
 use 5.014;
 use parent qw(Class::Component Object::Event);
 use Uc::IrcGateway::Common;
+__PACKAGE__->load_components(qw/Autocall::Autoload/);
 
 use AnyEvent::Socket qw(tcp_server);
 use Carp qw(carp croak);
@@ -74,8 +75,6 @@ sub new {
     $self->{err_codec} = find_encoding($self->err_charset);
 
     $self->{daemon}    = Uc::IrcGateway::TempUser->new(nick => $self->gatewayname, login => '*', host => $self->host);
-    $self->{codec}     = find_encoding($self->charset);
-    $self->{err_codec} = find_encoding($self->err_charset);
 
     $self->{app_dir}   = $self->{app_dir} ? dir($self->{app_dir}) : $self->default_app_dir();
     $self->{app_dir}->mkpath if not -e $self->{app_dir};
