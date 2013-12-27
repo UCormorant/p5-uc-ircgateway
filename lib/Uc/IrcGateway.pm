@@ -521,7 +521,7 @@ This document describes Uc::IrcGateway version v3.1.0
 
     package MyIrcGateway;
     use parent qw(Uc::IrcGateway);
-    __PACKAGE__->load_plugins(qw/DefaultSet/);
+    __PACKAGE__->load_plugins(qw/DefaultSet AutoRegisterUser/);
 
     package main;
 
