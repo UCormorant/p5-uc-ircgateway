@@ -69,7 +69,7 @@ sub new {
     $self->{motd_file}    //= file($0)->basename =~ s/(.*)\.\w+$/$1.motd.txt/r;
     $self->{motd_text}    //= undef;
 
-    $self->{message_set}  //= {};
+    $self->{message_set}  //= +{};
 
     $self->{codec}     = find_encoding($self->charset);
     $self->{err_codec} = find_encoding($self->err_charset);

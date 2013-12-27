@@ -6,6 +6,7 @@ use utf8;
 
 use parent qw(AnyEvent::Handle);
 
+use Uc::IrcGateway::Common;
 use Uc::IrcGateway::Structure;
 
 use Carp ();
@@ -57,35 +58,35 @@ sub get_users {
     my $self = shift;
     my $login = @_ == 1 ? shift : \@_;
     my $method = ref $login ? 'search' : 'single';
-    $self->schema->$method('user', { login => $login });
+    $self->schema->$method('user', +{ login => $login });
 }
 
 sub get_users_by_nicks {
     my $self = shift;
     my $nick = @_ == 1 ? shift : \@_;
     my $method = ref $nick ? 'search' : 'single';
-    $self->schema->$method('user', { nick => $nick });
+    $self->schema->$method('user', +{ nick => $nick });
 }
 
 sub del_users {
     my $self = shift;
     my $login = @_ == 1 ? shift : \@_;
-    $self->schema->delete('user', { login => $login });
+    $self->schema->delete('user', +{ login => $login });
 }
 
 sub has_user {
     my ($self, $login) = @_;
-    $self->schema->single('user', { login => $login }) ? 1 : 0;
+    $self->schema->single('user', +{ login => $login }) ? 1 : 0;
 }
 
 sub has_nick {
     my ($self, $nick) = @_;
-    $self->schema->single('user', { nick => $nick }) ? 1 : 0;
+    $self->schema->single('user', +{ nick => $nick }) ? 1 : 0;
 }
 
 sub lookup {
     my ($self, $nick) = @_;
-    my $user = $self->schema->single('user', { nick => $nick });
+    my $user = $self->schema->single('user', +{ nick => $nick });
     $user ? $user->login : undef;
 }
 
@@ -111,17 +112,17 @@ sub set_channels {
 sub get_channels {
     my $self = shift;
     my $method = wantarray ? 'search' : 'single';
-    $self->schema->$method('channel', { name => \@_ });
+    $self->schema->$method('channel', +{ name => \@_ });
 }
 
 sub del_chnnels {
     my $self = shift;
-    $self->schema->delete('channel', { name => \@_ });
+    $self->schema->delete('channel', +{ name => \@_ });
 }
 
 sub has_channel {
     my ($self, $c_name) = @_;
-    $self->schema->single('channel', { name => $c_name }) ? 1 : 0;
+    $self->schema->single('channel', +{ name => $c_name }) ? 1 : 0;
 }
 
 sub channel_list {
@@ -133,7 +134,18 @@ sub channel_list {
 sub who_is_channels {
     local $_;
     my ($self, $login) = @_;
-    map { $_->c_name } $self->schema->search('channel_user', { u_login => $login });
+    map { $_->c_name } $self->schema->search('channel_user', +{ u_login => $login });
+}
+
+sub get_state {
+    my ($self, $key) = @_;
+    my $state = $self->schema->single('state', +{ key => $key });
+    $state ? Uc::IrcGateway::Common::from_json($state->value) : ();
+}
+
+sub set_state {
+    my ($self, $key, $value) = @_;
+    $self->schema->update_or_create('state', +{ key => $key, value => Uc::IrcGateway::Common::to_json($value) });
 }
 
 

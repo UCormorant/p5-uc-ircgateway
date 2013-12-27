@@ -1,6 +1,6 @@
 use utf8;
 use strict;
-use Test::More tests => 6;
+use Test::More tests => 7;
 use Test::Difflet qw(is_deeply);
 
 use t::Util;
@@ -40,8 +40,8 @@ subtest 'is_valid_channel_name' => sub {
 };
 
 subtest 'opt_parser' => sub {
-    is_deeply({opt_parser('foo bar=baz')}, { foo => 1, bar => 'baz' }, "parse 'foo bar=baz'");
-    is_deeply({opt_parser('one one=two,three four')}, { one => 'two,three', four => 1 }, "parse 'one one=two,three four'");
+    is_deeply({opt_parser('foo bar=baz')}, +{ foo => 1, bar => 'baz' }, "parse 'foo bar=baz'");
+    is_deeply({opt_parser('one one=two,three four')}, +{ one => 'two,three', four => 1 }, "parse 'one one=two,three four'");
 };
 
 subtest 'decorate_text' => sub {
@@ -62,12 +62,17 @@ _TEXT_
 };
 
 subtest 'to_json' => sub {
-    like(to_json({ one => 'two', three => 'four' }), qr!{
+    is(to_json("hoge fuga piyo"), '"hoge fuga piyo"', 'allow_nonref');
+    like(to_json(+{ one => 'two', three => 'four' }), qr!{
 \s+(?:"one" : "two",
 \s+"three" : "four"|"three" : "four",
 \s+"one" : "two")
 }!, 'to_json');
 };
 
+subtest 'from_json' => sub {
+    is(from_json('"hoge fuga piyo"'), "hoge fuga piyo", 'allow_nonref');
+    is_deeply(from_json('{ "one": "two", "three": "four" }'), +{ one => 'two', three => 'four' }, 'from_json');
+};
 
 done_testing;

@@ -52,6 +52,7 @@ our @EXPORT = qw(
     decorate_text
     replace_crlf
     to_json
+    from_json
 
     mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
     prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
@@ -77,9 +78,14 @@ sub decorate_text {
 
 sub replace_crlf { $_[0] =~ s/[\r\n]+/ /gr; }
 
+our $JSON;
 sub to_json {
-    state $JSON = JSON->new->pretty->allow_blessed;
+    $JSON //= JSON->new->pretty->allow_nonref->allow_blessed;
     $JSON->encode(+shift) =~ s/$REGEX{chomp}//r;
+}
+sub from_json {
+    $JSON //= JSON->new->pretty->allow_nonref->allow_blessed;
+    $JSON->decode(+shift);
 }
 
 1; # Magic true value required at end of module

@@ -30,12 +30,12 @@ sub new {
 sub users { # has_many
     local $_;
     my $self = shift;
-    my @logins = map { $_->u_login } $self->{teng}->search('channel_user', { c_name => $self->name, @_ });
+    my @logins = map { $_->u_login } $self->{teng}->search('channel_user', +{ c_name => $self->name, @_ });
     if (wantarray) {
-        return grep { defined } $self->{teng}->search('user', { login => \@logins });
+        return grep { defined } $self->{teng}->search('user', +{ login => \@logins });
     }
     else {
-        return $self->{teng}->search('user', { login => \@logins });
+        return $self->{teng}->search('user', +{ login => \@logins });
     }
 }
 
@@ -69,13 +69,13 @@ sub part_users {
 
 sub has_user {
     my ($self, $login) = @_;
-    $self->{teng}->single('channel_user', { c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
+    $self->{teng}->single('channel_user', +{ c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
 }
 
 sub login_list {
     local $_;
     my $self = shift;
-    map { $_->u_login } $self->{teng}->search('channel_user', { c_name => $self->name, @_ });
+    map { $_->u_login } $self->{teng}->search('channel_user', +{ c_name => $self->name, @_ });
 }
 
 sub nick_list {
@@ -92,17 +92,17 @@ sub user_count {
 
 sub give_operator {
     my $self = shift;
-    $self->{teng}->update_or_create('channel_user', { operator => 1, c_name => $self->name, u_login => [collect_login(@_)] })
+    $self->{teng}->update_or_create('channel_user', +{ operator => 1, c_name => $self->name, u_login => [collect_login(@_)] })
 }
 
 sub deprive_operator {
     my $self = shift;
-    $self->{teng}->update_or_create('channel_user', { operator => 0, c_name => $self->name, u_login => [collect_login(@_)] })
+    $self->{teng}->update_or_create('channel_user', +{ operator => 0, c_name => $self->name, u_login => [collect_login(@_)] })
 }
 
 sub is_operator {
     my ($self, $login) = @_;
-    $self->{teng}->single('channel_user', { operator => 1, c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
+    $self->{teng}->single('channel_user', +{ operator => 1, c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
 }
 
 sub operator_login_list {
@@ -122,17 +122,17 @@ sub operator_count {
 
 sub give_voice {
     my $self = shift;
-    $self->{teng}->update_or_create('channel_user', { speaker => 1, c_name => $self->name, u_login => [collect_login(@_)] })
+    $self->{teng}->update_or_create('channel_user', +{ speaker => 1, c_name => $self->name, u_login => [collect_login(@_)] })
 }
 
 sub deprive_voice {
     my $self = shift;
-    $self->{teng}->update_or_create('channel_user', { speaker => 0, c_name => $self->name, u_login => [collect_login(@_)] })
+    $self->{teng}->update_or_create('channel_user', +{ speaker => 0, c_name => $self->name, u_login => [collect_login(@_)] })
 }
 
 sub is_speaker {
     my ($self, $login) = @_;
-    $self->{teng}->single('channel_user', { speaker => 1, c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
+    $self->{teng}->single('channel_user', +{ speaker => 1, c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
 }
 
 sub speaker_login_list {

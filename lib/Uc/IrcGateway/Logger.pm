@@ -17,8 +17,8 @@ sub add_log_level {
 sub new {
     my $class = shift;
     my $self = $class->SUPER::new(@_);
-    $self->{on_destroy} = [];
-    $self->{log_level}  = {};
+    $self->{on_destroy} = +[];
+    $self->{log_level}  = +{};
     $self;
 }
 
