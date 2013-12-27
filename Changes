@@ -2,6 +2,26 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.1.1 2013-12-27T19:30:55Z
+
+    - bugfix: "$handle->set_users" fails with appended 'TempUser'.
+
+    - bugfix: "$self->send_cmd" shows user object's memory address
+              with 'TempUser'.
+
+    - add from_json func in Common.pm
+
+        - it decodes JSON to perl variables.
+
+    - JSON->allow_nonref is enabled.
+
+        - to_json / from_json accept string.
+
+    - add eq_hash func in Common.pm
+
+        - it compares 2 shallow hashes simply.
+          it cannot check deep hash.
+
 v3.1.0 2013-12-27T01:22:44Z
 
     - add registeration feature
