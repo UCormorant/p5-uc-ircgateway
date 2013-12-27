@@ -6,7 +6,7 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 # VERSION
 
-This document describes Uc::IrcGateway version v3.0.1
+This document describes Uc::IrcGateway version v3.1.0
 
 
 
@@ -59,13 +59,13 @@ Please report any bugs or feature requests to
 
 # AUTHOR
 
-U=Cormorant  `<u@chimata.org>`
+U=Cormorant <u@chimata.org>
 
 
 
 # LICENCE AND COPYRIGHT
 
-Copyright (c) 2011-2013, U=Cormorant `<u@chimata.org>`. All rights reserved.
+Copyright (c) 2011-2013, U=Cormorant. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See [perlartistic](http://search.cpan.org/perldoc?perlartistic).

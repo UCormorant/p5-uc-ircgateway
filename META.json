@@ -1,7 +1,7 @@
 {
    "abstract" : "ãã©ã¬ãã«ãªãªã¬ãªã¬IRCã²ã¼ãã¦ã§ã¤åºåºã¯ã©ã¹",
    "author" : [
-      "U=Cormorant  C<< <u@chimata.org> >>"
+      "U=Cormorant <u@chimata.org>"
    ],
    "dynamic_config" : 0,
    "generated_by" : "Minilla/v0.8.3, CPAN::Meta::Converter version 2.130880",
@@ -79,8 +79,5 @@
          "web" : "https://github.com/UCormorant/p5-uc-ircgateway"
       }
    },
-   "version" : "v3.0.1",
-   "x_contributors" : [
-      "U=Cormorant <u@chimata.org>"
-   ]
+   "version" : "v3.1.0"
 }

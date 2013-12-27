@@ -2,6 +2,41 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.1.0 2013-12-27T01:22:44Z
+
+    - add registeration feature
+
+        - On the registeration phase after NICK and USER,
+          "$self->register_user" will be called.
+          So, you should define subroutine 'register_user'
+          in your package.
+        - You can load plugin 'AutoRegisterUser'
+          to define 'sub register_user' automatically.
+        - If 'CustomRegisterUser' plugin is loaded,
+          it notices when 'register_user' method is undefined.
+
+    - add hook point
+
+        - before_register_user
+        - after_register_user
+
+    - delete hook point
+
+        - irc.nick.before_register
+        - irc.nick.after_register
+        - irc.names.before_register
+        - irc.names.after_register
+
+    - bugfix: same nick users can be registered in duplicate
+
+        - migrate/v3_0_0_to_v3_1_0.sql
+
+    - User object is allowed as arguments of following methods.
+
+        - Uc::IrcGateway::Channel
+            - has_user, is_operator, is_speaker
+
+
 v3.0.1 2013-12-25T17:20:59Z
 
     - add hook point

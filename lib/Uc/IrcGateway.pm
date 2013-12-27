@@ -514,7 +514,7 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version v3.0.1
+This document describes Uc::IrcGateway version v3.1.0
 
 
 =head1 SYNOPSIS
@@ -559,12 +559,12 @@ L<https://github.com/UCormorant/p5-uc-ircgateway/issues>
 
 =head1 AUTHOR
 
-U=Cormorant  C<< <u@chimata.org> >>
+U=Cormorant E<lt>u@chimata.orgE<gt>
 
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2011-2013, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
+Copyright (c) 2011-2013, U=Cormorant. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
