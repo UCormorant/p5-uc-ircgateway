@@ -26,13 +26,15 @@ BEGIN {
         userinfo away_message last_modified
     ), sort keys %MODE_TABLE);
 }
-use Class::Accessor::Lite rw => \@USER_PROP;
+use Class::Accessor::Lite rw => [@USER_PROP, 'registered'];
 
 # constructer
 
 sub new {
     my $class = shift;
     my %args = @_ == 1 ? %{$_[0]} : @_;
+
+    $args{registered} //= 0;
 
     bless +{
         %args,
@@ -66,7 +68,8 @@ sub register {
 }
 
 sub to_prefix {
-    sprintf "%s!%s@%s", "*", "*", "*";
+    my $self = shift;
+    sprintf "%s!%s@%s", $self->registered ? (@{$self}{qw/nick login host/}) : ("*", "*", "*");
 }
 
 sub user_prop {

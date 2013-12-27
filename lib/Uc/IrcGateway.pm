@@ -74,7 +74,7 @@ sub new {
     $self->{codec}     = find_encoding($self->charset);
     $self->{err_codec} = find_encoding($self->err_charset);
 
-    $self->{daemon}    = Uc::IrcGateway::TempUser->new(nick => $self->gatewayname, login => '*', host => $self->host);
+    $self->{daemon}    = Uc::IrcGateway::TempUser->new(nick => $self->gatewayname, login => '*', host => $self->host, registered => 1);
 
     $self->{app_dir}   = $self->{app_dir} ? dir($self->{app_dir}) : $self->default_app_dir();
     $self->{app_dir}->mkpath if not -e $self->{app_dir};
@@ -364,7 +364,7 @@ sub send_cmd {
         return;
     }
 
-    my $prefix = blessed $user && $user->isa('Uc::IrcGateway::User') ? $user->to_prefix : $user ? $user : '*';
+    my $prefix = blessed $user && $user->can('to_prefix') ? $user->to_prefix : $user ? $user : '*';
     my $msg = mk_msg($prefix, $cmd, @args);
        $msg = $self->trim_message($msg);
 

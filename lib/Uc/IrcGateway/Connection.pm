@@ -11,7 +11,7 @@ use Uc::IrcGateway::Structure;
 
 use Carp ();
 use Path::Class qw(file);
-use Scalar::Util qw(refaddr);
+use Scalar::Util qw(refaddr blessed);
 
 use Class::Accessor::Lite (
     rw => [qw(self)],
@@ -50,7 +50,8 @@ sub new {
 
 sub set_user {
     my $self = shift;
-    my %args = @_ == 1 ? %{$_[0]} : @_;
+    my %args = @_ != 1 ? @_ : blessed $_[0] && $_[0]->isa('Uc::IrcGateway::TempUser')
+                            ? %{$_[0]->user_prop} : %{$_[0]};
     $self->schema->insert('user', \%args);
 }
 

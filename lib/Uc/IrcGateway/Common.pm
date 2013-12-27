@@ -53,6 +53,7 @@ our @EXPORT = qw(
     replace_crlf
     to_json
     from_json
+    eq_hash
 
     mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
     prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
@@ -87,6 +88,12 @@ sub from_json {
     $JSON //= JSON->new->pretty->allow_nonref->allow_blessed;
     $JSON->decode(+shift);
 }
+
+sub eq_hash {
+    my ($hash1, $hash2) = @_;
+    (join($NUL, sort %$hash1) eq join($NUL, sort %$hash2));
+}
+
 
 1; # Magic true value required at end of module
 __END__

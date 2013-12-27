@@ -1,6 +1,6 @@
 use utf8;
 use strict;
-use Test::More tests => 7;
+use Test::More tests => 8;
 use Test::Difflet qw(is_deeply);
 
 use t::Util;
@@ -21,6 +21,8 @@ subtest 'import elements' => sub {
         decorate_text
         replace_crlf
         to_json
+        from_json
+        eq_hash
 
         mk_msg parse_irc_msg split_prefix decode_ctcp encode_ctcp
         prefix_nick prefix_user prefix_host is_nick_prefix join_prefix
@@ -73,6 +75,14 @@ subtest 'to_json' => sub {
 subtest 'from_json' => sub {
     is(from_json('"hoge fuga piyo"'), "hoge fuga piyo", 'allow_nonref');
     is_deeply(from_json('{ "one": "two", "three": "four" }'), +{ one => 'two', three => 'four' }, 'from_json');
+};
+
+subtest 'eq_hash' => sub {
+    my $hash1 = +{ foo => 1,  bar => 2, baz => 'three' };
+    my $hash2 = +{ foo => 1,  bar => 2, baz => 'three' };
+    my $hash3 = +{ hoge => 1, bar => 2, baz => 'piyo' };
+    ok  eq_hash($hash1, $hash2), 'eq cmp';
+    ok !eq_hash($hash1, $hash3), 'ne cmp';
 };
 
 done_testing;
