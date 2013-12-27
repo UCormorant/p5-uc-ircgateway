@@ -91,7 +91,7 @@ sub from_json {
 
 sub eq_hash {
     my ($hash1, $hash2) = @_;
-    (join($NUL, sort %$hash1) eq join($NUL, sort %$hash2));
+    (join($NUL, sort grep { defined } %$hash1) eq join($NUL, sort grep { defined } %$hash2));
 }
 
 

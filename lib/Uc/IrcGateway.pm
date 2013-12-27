@@ -1,4 +1,4 @@
-package Uc::IrcGateway v3.1.0;
+package Uc::IrcGateway v3.1.1;
 use 5.014;
 use parent qw(Class::Component Object::Event);
 use Uc::IrcGateway::Common;
@@ -514,7 +514,7 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version v3.1.0
+This document describes Uc::IrcGateway version v3.1.1
 
 
 =head1 SYNOPSIS

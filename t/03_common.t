@@ -78,9 +78,9 @@ subtest 'from_json' => sub {
 };
 
 subtest 'eq_hash' => sub {
-    my $hash1 = +{ foo => 1,  bar => 2, baz => 'three' };
-    my $hash2 = +{ foo => 1,  bar => 2, baz => 'three' };
-    my $hash3 = +{ hoge => 1, bar => 2, baz => 'piyo' };
+    my $hash1 = +{ foo => 1,  bar => 2,     baz => 'three' };
+    my $hash2 = +{ foo => 1,  bar => 2,     baz => 'three' };
+    my $hash3 = +{ hoge => 1, bar => undef, baz => 'piyo' };
     ok  eq_hash($hash1, $hash2), 'eq cmp';
     ok !eq_hash($hash1, $hash3), 'ne cmp';
 };
