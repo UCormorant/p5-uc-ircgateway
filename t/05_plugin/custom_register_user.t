@@ -13,8 +13,8 @@ no strict 'refs';
 eval { new_ircd('Uc::IrcGateway'); };
 ok $@, 'dies when register_user method is not defined';
 
-*{'Uc::IrcGatway::register_user'} = sub {};
+*{'Uc::IrcGateway::register_user'} = sub {};
 eval { new_ircd('Uc::IrcGateway'); };
-ok !$@, 'lives when register_user method is defined';
+ok !$@, 'lives when register_user method is defined'; diag $@;
 
 done_testing;

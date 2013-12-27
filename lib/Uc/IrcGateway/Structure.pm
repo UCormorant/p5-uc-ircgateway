@@ -73,8 +73,9 @@ CREATE TABLE 'user' (
   'local_operator' boolean NOT NULL DEFAULT 0,
   'allow_s_notice' boolean NOT NULL DEFAULT 0,
 
-  PRIMARY KEY ('login', 'nick')
-)
+  PRIMARY KEY ('login')
+);
+CREATE UNIQUE INDEX 'nick_index' ON 'user' ('nick')
     },
     channel_user     => q{
 CREATE TABLE 'channel_user' (
@@ -104,7 +105,9 @@ sub setup_database {
         delete $sql{$table} if $sth->fetchrow_arrayref->[0];
     }
 
-    $self->execute($sql{$_}) for keys %sql;
+    for my $table (keys %sql) {
+        $self->execute($_) for split ";", $sql{$table};
+    }
 }
 
 sub drop_table {

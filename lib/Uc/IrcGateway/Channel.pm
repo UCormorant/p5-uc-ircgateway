@@ -64,13 +64,12 @@ sub join_users {
 
 sub part_users {
     my $self = shift;
-    my @logins = collect_login(@_);
     $self->{teng}->delete('channel_user', +{ c_name => $self->name, u_login => [collect_login(@_)] });
 }
 
 sub has_user {
     my ($self, $login) = @_;
-    $self->{teng}->single('channel_user', { c_name => $self->name, u_login => $login }) ? 1 : 0;
+    $self->{teng}->single('channel_user', { c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
 }
 
 sub login_list {
@@ -103,7 +102,7 @@ sub deprive_operator {
 
 sub is_operator {
     my ($self, $login) = @_;
-    $self->{teng}->single('channel_user', { operator => 1, c_name => $self->name, u_login => $login }) ? 1 : 0;
+    $self->{teng}->single('channel_user', { operator => 1, c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
 }
 
 sub operator_login_list {
@@ -133,7 +132,7 @@ sub deprive_voice {
 
 sub is_speaker {
     my ($self, $login) = @_;
-    $self->{teng}->single('channel_user', { speaker => 1, c_name => $self->name, u_login => $login }) ? 1 : 0;
+    $self->{teng}->single('channel_user', { speaker => 1, c_name => $self->name, u_login => collect_login($login) }) ? 1 : 0;
 }
 
 sub speaker_login_list {
