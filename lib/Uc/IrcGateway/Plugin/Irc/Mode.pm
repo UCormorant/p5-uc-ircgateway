@@ -2,6 +2,7 @@ package Uc::IrcGateway::Plugin::Irc::Mode;
 use 5.014;
 use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
+use List::Util qw(first);
 
 sub init {
     my ($plugin, $class) = @_;
@@ -44,54 +45,53 @@ sub action {
                 if ($m eq '+' or $m eq '-') {
                     $oper = $m; next;
                 }
-                given ($m) {
+                if ($m eq 'o') {
     #     O - "チャンネルクリエータ"の権限を付与
     #     o - チャンネルオペレータの特権を付与/剥奪
-                    when ('o') {
-                        $oper ||= '+';
+                    $oper ||= '+';
 
-                        my $target_nick  = shift @mode_list;
-                        my $target_login = $handle->lookup($target);
+                    my $target_nick  = shift @mode_list;
+                    my $target_login = $handle->lookup($target);
 
-                        if (not $chan->has_user($target_login)) {
-                            $self->send_msg( $handle, ERR_USERNOTINCHANNEL, $target, $chan->name, "They aren't on that channel" );
+                    if (not $chan->has_user($target_login)) {
+                        $self->send_msg( $handle, ERR_USERNOTINCHANNEL, $target, $chan->name, "They aren't on that channel" );
+                    }
+                    elsif ($chan->is_operator($user->login)) {
+                        if ($chan->is_operator($target_login) and $oper eq '-') {
+                            $chan->deprive_operator($target_login, $target_nick);
+                            $mode_string  ||= $oper; $mode_string .= $m;
+                            $param_string &&= $param_string.' '; $param_string .= $target_nick;
                         }
-                        elsif ($chan->is_operator($user->login)) {
-                            if ($chan->is_operator($target_login) and $oper eq '-') {
-                                $chan->deprive_operator($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
-                            elsif (!$chan->is_operator($target_login)) {
-                                $chan->give_operator($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
+                        elsif (!$chan->is_operator($target_login)) {
+                            $chan->give_operator($target_login, $target_nick);
+                            $mode_string  ||= $oper; $mode_string .= $m;
+                            $param_string &&= $param_string.' '; $param_string .= $target_nick;
                         }
                     }
+                }
     #     v - ボイス特権を付与/剥奪
-                    when ('v') {
-                        $oper ||= '+';
+                elsif ($m eq 'v') {
+                    $oper ||= '+';
 
-                        my $target_nick  = shift @mode_list;
-                        my $target_login = $handle->lookup($target);
+                    my $target_nick  = shift @mode_list;
+                    my $target_login = $handle->lookup($target);
 
-                        if (not $chan->has_user($target_login)) {
-                            $self->send_msg( $handle, ERR_USERNOTINCHANNEL, $target, $chan->name, "They aren't on that channel" );
+                    if (not $chan->has_user($target_login)) {
+                        $self->send_msg( $handle, ERR_USERNOTINCHANNEL, $target, $chan->name, "They aren't on that channel" );
+                    }
+                    elsif ($chan->is_speaker($user->login)) {
+                        if ($chan->is_speaker($target_login) and $oper eq '-') {
+                            $chan->deprive_voice($target_login, $target_nick);
+                            $mode_string  ||= $oper; $mode_string .= $m;
+                            $param_string &&= $param_string.' '; $param_string .= $target_nick;
                         }
-                        elsif ($chan->is_speaker($user->login)) {
-                            if ($chan->is_speaker($target_login) and $oper eq '-') {
-                                $chan->deprive_voice($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
-                            elsif (!$chan->is_speaker($target_login)) {
-                                $chan->give_voice($target_login, $target_nick);
-                                $mode_string  ||= $oper; $mode_string .= $m;
-                                $param_string &&= $param_string.' '; $param_string .= $target_nick;
-                            }
+                        elsif (!$chan->is_speaker($target_login)) {
+                            $chan->give_voice($target_login, $target_nick);
+                            $mode_string  ||= $oper; $mode_string .= $m;
+                            $param_string &&= $param_string.' '; $param_string .= $target_nick;
                         }
                     }
+                }
     #     a - 匿名チャンネルフラグをトグル
     #     i - 招待のみチャンネルフラグをトグル
     #     m - モデレートチャンネルをトグル
@@ -101,20 +101,20 @@ sub action {
     #     s - シークレットチャンネルフラグをトグル
     #     r - サーバreopチャンネルフラグをトグル
     #     t - トピック変更をチャンネルオペレータのみに限定するかをトグル
-                    when ([qw/a i m n q p s r t/]) {
-                        my $method = $m eq 'a' ? 'anonymous'
-                                   : $m eq 'i' ? 'invite_only'
-                                   : $m eq 'm' ? 'moderate'
-                                   : $m eq 'n' ? 'no_message'
-                                   : $m eq 'q' ? 'quiet'
-                                   : $m eq 'p' ? 'private'
-                                   : $m eq 's' ? 'secret'
-                                   : $m eq 'r' ? 'reop'
-                                   :             'op_topic_only';
-                        $oper ||= '+';
-                        $chan->$method($oper eq '-' ? 0 : 1);
-                        $mode_string  ||= $oper; $mode_string .= $m;
-                    }
+                elsif (defined first { $_ eq $m } qw/a i m n q p s r t/) {
+                    my $method = $m eq 'a' ? 'anonymous'
+                               : $m eq 'i' ? 'invite_only'
+                               : $m eq 'm' ? 'moderate'
+                               : $m eq 'n' ? 'no_message'
+                               : $m eq 'q' ? 'quiet'
+                               : $m eq 'p' ? 'private'
+                               : $m eq 's' ? 'secret'
+                               : $m eq 'r' ? 'reop'
+                               :             'op_topic_only';
+                    $oper ||= '+';
+                    $chan->$method($oper eq '-' ? 0 : 1);
+                    $mode_string  ||= $oper; $mode_string .= $m;
+                }
     #
     #     k - チャンネルキー(パスワード)の設定／解除
     #     l - チャンネルのユーザ数制限の設定／解除
@@ -122,9 +122,8 @@ sub action {
     #     b - ユーザをシャットアウトする禁止(ban)マスクの設定／解除
     #     e - 禁止マスクに優先する例外マスクの設定／解除
     #     I - 自動的に招待のみフラグに優先する招待マスクの設定／解除
-                    default {
-                        $self->send_msg( $handle, ERR_UNKNOWNCOMMAND, $m, "is unknown mode char to me for @{[$chan->name]}" );
-                    }
+                else {
+                    $self->send_msg( $handle, ERR_UNKNOWNCOMMAND, $m, "is unknown mode char to me for @{[$chan->name]}" );
                 }
             }
         }

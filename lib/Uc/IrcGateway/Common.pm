@@ -79,10 +79,25 @@ sub decorate_text {
 
 sub replace_crlf { $_[0] =~ s/[\r\n]+/ /gr; }
 
-our $JSON;
+my $JSON;
 sub to_json {
     $JSON //= JSON->new->pretty->allow_nonref->allow_blessed;
-    $JSON->encode(+shift) =~ s/$REGEX{chomp}//r;
+    my $value = shift;
+    my %opts = @_ == 1 ? %{$_[0]} : @_;
+
+    my $prv = $JSON;
+    if (%opts) {
+        for my $attr (qw(
+            ascii latin1 utf8
+            pretty indent space_before space_after
+            relaxed canonical
+            allow_nonref allow_unknown allow_blessed convert_blessed
+            shrink max_depth max_size
+        )) {
+            $prv = $prv->$attr(delete $opts{$attr}) if exists $opts{$attr};
+        }
+    }
+    $prv->encode($value) =~ s/$REGEX{chomp}//r;
 }
 sub from_json {
     $JSON //= JSON->new->pretty->allow_nonref->allow_blessed;

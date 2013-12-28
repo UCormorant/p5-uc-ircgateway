@@ -4,9 +4,8 @@ use 5.014;
 use warnings;
 use utf8;
 use Carp qw(croak);
-use List::Util qw(shuffle);
+use List::Util qw(first shuffle);
 use overload '""' => \&tid, '=' => \&tid;
-use Any::Moose;
 
 our @TYPABLE_MAP = ();
 my @consonant_voiceless         = qw/k s t n h m y r w/;
@@ -15,38 +14,62 @@ my @consonant_contracted        = qw/ky sh ty ny hy my ry/;
 my @consonant_contracted_sonant = qw/gy zy dy by py/;
 my @consonant = (@consonant_voiceless, @consonant_contracted, @consonant_sonant, @consonant_contracted_sonant);
 
-has 'index' => ( is => 'rw', isa => 'Int', default => 0 );
-has 'scale' => ( is => 'ro', isa => 'Int', default => 2 );
-has [qw/fixed shuffled/] => ( is => 'ro', isa => 'Bool', default => 0 );
-has 'max_size'  => ( is => 'rw', isa => 'Int', lazy_build => 1, trigger => sub {
-    my ($self, $value) = @_;
-    my $max_size = scalar @{$self->indices};
-    if ($value > $max_size) { $self->max_size($max_size); }
-    else { CORE::splice @{$self->indices}, $value; }
-} );
+use Class::Accessor::Lite (
+    rw => [qw(
+        index
+        scale
+    )],
+    ro => [qw(
+        fixed
+        shuffled
+        items
+    )],
+);
 
-has 'items'   => ( is => 'ro', isa => 'HashRef', default => sub { return {} }, init_arg => undef );
-has 'indices' => ( is => 'ro', isa => 'ArrayRef[Str]', lazy_build => 1, init_arg => undef );
-has 'chars'   => ( is => 'ro', isa => 'ArrayRef[Str]', default => sub {
+sub new {
+    my $class = shift;
+    my %args = @_ == 1 ? %{$_[0]} : @_;
+
+    $args{index} //= 0;
+    $args{scale} //= 2;
+    $args{fixed}    = $args{fixed}    ? 1 : 0;
+    $args{shuffled} = $args{shuffled} ? 1 : 0;
+
+    $args{items} //= +{};
+
+    bless \%args, $class;
+}
+
+sub chars {
     return \@TYPABLE_MAP if scalar @TYPABLE_MAP;
     local $_;
     for my $consonant ('', @consonant) {
         my @vowel;
-        given ($consonant) {
-            when ([@consonant_contracted, @consonant_contracted_sonant]) { @vowel = qw/a u o/;     }
-            default                                                      { @vowel = qw/a i u e o/; }
-        }
+        my $match = defined first { $_ eq $consonant } (@consonant_contracted, @consonant_contracted_sonant);
+        if ($match) { @vowel = qw/a u o/;     }
+        else        { @vowel = qw/a i u e o/; }
         push @TYPABLE_MAP, "$consonant$_" for @vowel;
     }
     return \@TYPABLE_MAP;
-} );
+}
 
-__PACKAGE__->meta->make_immutable;
-no Any::Moose;
+sub max_size {
+    my ($self, $value) = @_;
 
-sub _build_indices {
+    my $max_size = scalar @{$self->indices};
+    $self->{max_size} = $max_size if not exists $self->{max_size};
+    return $self->{max_size} if not defined $value;
+
+    if ($value > $max_size) { $self->{max_size} = $max_size; }
+    else { CORE::splice @{$self->indices}, $value; }
+}
+
+sub indices {
+    state @indices;
+    return \@indices if scalar @indices;
+
     my $self = CORE::shift;
-    my @indices; my $a = $self->chars;
+    my $a = $self->chars;
 
     my $fill_tmap; $fill_tmap = sub {
         my ($prefix, $level) = @_;
@@ -63,10 +86,6 @@ sub _build_indices {
     @indices = shuffle @indices if $self->shuffled;
 
     return \@indices;
-}
-
-sub _build_max_size {
-    return scalar @{+CORE::shift->indices};
 }
 
 
@@ -229,7 +248,7 @@ Uc::IrcGateway::TypableMap - Generate TypableMap Object for Uc::IrcGateway
     $tmap->push("you suck too! [$tmap]"); # you suck too! [i]
     $tmap->push("there is awesome internet! [$tmap]"); # there is awesome internet! [u]
 
-    print $tmap->get('u'); # there is awesome internet! [u];
+    print $tmap->get('u'); # there is awesome internet! [u]
 
     # or
 
@@ -239,8 +258,8 @@ Uc::IrcGateway::TypableMap - Generate TypableMap Object for Uc::IrcGateway
     push @TIMELINE, "you suck too! [$tmap]"; # you suck too! [nu]
     push @TIMELINE, "there is awesome internet! [$tmap]"; # there is awesome internet! [pia]
 
-    print $TIMELINE[2]; # there is awesome internet! [pia];
-    print $TIMELINE[$tmap->tid2index('pia')]; # there is awesome internet! [pia];
+    print $TIMELINE[2]; # there is awesome internet! [pia]
+    print $TIMELINE[$tmap->tid2index('pia')]; # there is awesome internet! [pia]
 
 
 =head1 DESCRIPTION

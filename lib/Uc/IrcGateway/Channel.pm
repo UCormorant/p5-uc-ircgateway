@@ -30,12 +30,13 @@ sub new {
 sub users { # has_many
     local $_;
     my $self = shift;
-    my @logins = map { $_->u_login } $self->{teng}->search('channel_user', +{ c_name => $self->name, @_ });
+    my @logins = $self->login_list(@_);
+    my $sql = sprintf q{SELECT * FROM user WHERE login IN (%s)}, join ',', map { sprintf "'%s'", s/'/\\'/gr; } @logins;
     if (wantarray) {
-        return grep { defined } $self->{teng}->search('user', +{ login => \@logins });
+        return grep { defined } $self->{teng}->search_by_sql($sql);
     }
     else {
-        return $self->{teng}->search('user', +{ login => \@logins });
+        return $self->{teng}->search_by_sql($sql);
     }
 }
 

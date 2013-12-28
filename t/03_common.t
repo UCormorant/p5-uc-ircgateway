@@ -70,6 +70,7 @@ subtest 'to_json' => sub {
 \s+"three" : "four"|"three" : "four",
 \s+"one" : "two")
 }!, 'to_json');
+    is(to_json(+{ 1 => 2, 3 => 4 }, pretty => 0), '{"1":2,"3":4}', 'option');
 };
 
 subtest 'from_json' => sub {

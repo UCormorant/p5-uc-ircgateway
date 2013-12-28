@@ -11,7 +11,10 @@ sub channels { # has_many
     local $_;
     my $self = shift;
     my @channels = map { $_->c_name } $self->{teng}->search('channel_user', +{ u_login => $self->login, @_ });
-    $self->{teng}->search('channel', +{ name => \@channels });
+    $self->{teng}->search_by_sql(
+        sprintf q{SELECT * FROM channel WHERE name IN (%s)},
+            join ',', map { sprintf "'%s'", s/'/\\'/gr; } @channels
+    );
 }
 
 sub operator_channels { # has_many

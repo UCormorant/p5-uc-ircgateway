@@ -146,7 +146,7 @@ sub get_state {
 
 sub set_state {
     my ($self, $key, $value) = @_;
-    $self->schema->update_or_create('state', +{ key => $key, value => Uc::IrcGateway::Common::to_json($value) });
+    $self->schema->update_or_create('state', +{ key => $key, value => Uc::IrcGateway::Common::to_json($value, pretty => 0) });
 }
 
 
