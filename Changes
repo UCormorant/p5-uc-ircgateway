@@ -2,6 +2,17 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.1.2 2013-12-28T23:37:11Z
+
+    - bugfix: "bind_param" dies of too many arguments over 999 (SQLite limitation)
+
+    - modify "to_json" to allow options
+
+        - "set_state" stores more small size value
+
+    - reject smartmatch features.
+    - no moose TypeableMap
+
 v3.1.1 2013-12-27T19:30:55Z
 
     - bugfix: "$handle->set_users" fails with appended 'TempUser'.
