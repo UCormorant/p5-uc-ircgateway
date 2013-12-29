@@ -410,7 +410,7 @@ sub send_welcome {
 sub default_app_dir {
     my $self = shift;
     my $path = file($0);
-    my ($dir, $app_dir) = ($path->dir, sprintf '.%s', $path->basename);
+    my ($dir, $app_dir) = ($path->dir, sprintf '.%s', $path->basename =~ s/\.\w+$//r);
 
     if ($self->{app_dir_to_home}) {
         for my $home (qw/HOME USERPROFILE/) {
