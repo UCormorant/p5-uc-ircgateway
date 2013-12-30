@@ -2,6 +2,10 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.1.4 2013-12-30T21:25:55Z
+
+    bugfix: these DBI options are not enabled: RaiseError, PrintError, AutoCommit
+
 v3.1.3 2013-12-30T11:10:48Z
 
     - change: "$self->default_app_dir" uses basename without .extention
