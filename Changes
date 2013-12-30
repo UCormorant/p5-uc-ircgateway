@@ -2,9 +2,32 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.1.3 2013-12-30T11:10:48Z
+
+    - change: "$self->default_app_dir" uses basename without .extention
+
+        - ex. echo_server.pl uses dir '.echo_server'
+
+    - register_user plugins are changed into component
+
+        - Plugin/AutoRegisterUser.pm -> Component/AutoRegisterUser.pm
+        - Plugin/CustomRegisterUser.pm -> Component/CustomRegisterUser.pm
+
+        - remove load_components('Autocall::Autoload') from Uc::IrcGateway.pm
+
+    - bugfix: Common::to_json overrides common JSON instance settings when
+              it calls with options
+    - bugfix: exception_cb can't die if $self->condvar is set
+
+    - update POD
+
+        - Common.pm: SYNOPSIS and INTERFACE
+        - add '=cut' at tail of each files
+
 v3.1.2 2013-12-28T23:37:11Z
 
-    - bugfix: "bind_param" dies of too many arguments over 999 (SQLite limitation)
+    - bugfix: "bind_param" dies of too many arguments over 999
+              (SQLite limitation)
 
     - modify "to_json" to allow options
 

@@ -6,7 +6,7 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 # VERSION
 
-This document describes Uc::IrcGateway version v3.1.2
+This document describes Uc::IrcGateway version v3.1.3
 
 
 
@@ -14,7 +14,8 @@ This document describes Uc::IrcGateway version v3.1.2
 
     package MyIrcGateway;
     use parent qw(Uc::IrcGateway);
-    __PACKAGE__->load_plugins(qw/DefaultSet AutoRegisterUser/);
+    __PACKAGE__->load_components(qw/AutoRegisterUser/);
+    __PACKAGE__->load_plugins(qw/DefaultSet/);
 
     package main;
 
@@ -65,7 +66,7 @@ U=Cormorant <u@chimata.org>
 
 # LICENCE AND COPYRIGHT
 
-Copyright (c) 2011-2013, U=Cormorant. All rights reserved.
+Copyright (C) 2011-2013, U=Cormorant. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See [perlartistic](http://search.cpan.org/perldoc?perlartistic).
