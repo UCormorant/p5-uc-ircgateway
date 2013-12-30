@@ -12,8 +12,7 @@ our @EXPORT = qw(setup_dbh);
 
 sub setup_dbh {
     my $file = shift // ':memory:';
-    my $dbh = DBI->connect('dbi:SQLite:'.$file,,,{RaiseError => 1, PrintError => 0, AutoCommit => 1, sqlite_unicode => 1});
-    $dbh->{sqlite_unicode} = 1;
+    my $dbh = DBI->connect('dbi:SQLite:'.$file,undef,undef,{RaiseError => 1, PrintError => 0, AutoCommit => 1, sqlite_unicode => 1});
     $dbh;
 }
 

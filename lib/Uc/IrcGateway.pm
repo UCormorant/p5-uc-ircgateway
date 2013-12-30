@@ -1,4 +1,4 @@
-package Uc::IrcGateway v3.1.3;
+package Uc::IrcGateway v3.1.4;
 use 5.014;
 use parent qw(Class::Component Object::Event);
 use Uc::IrcGateway::Common;
