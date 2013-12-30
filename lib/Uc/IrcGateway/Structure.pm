@@ -216,7 +216,7 @@ sub user { # blongs_to
 1; # Magic true value required at end of module
 __END__
 
-=encoding utf8
+=encoding utf-8
 
 =head1 NAME
 
@@ -228,12 +228,10 @@ Uc::IrcGateway::Structure - Uc::IrcGatewayのための永続的な状態を扱�
     use Uc::IrcGateway::Connection;
     my $handle = Uc::IrcGateway::Connection->new( fh => $fh );
 
-    # you should set 'self' before call 'schema'
-
-    $handle->self();
+    $handle->self(Uc::IrcGateway::TempUser->new(nick => 'John'));
 
     # get Uc::IG data structure
-    my $schema = $handle->schema();
+    my $schema = $handle->schema;
 
     # get connection user's information
     my $user_info = $schema->single('user', { nick => $handle->self->nick });
@@ -257,23 +255,25 @@ Please report any bugs or feature requests to
 L<https://github.com/UCormorant/p5-uc-ircgateway/issues>
 
 
+=head1 AUTHOR
+
+U=Cormorant E<lt>u@chimata.orgE<gt>
+
+
 =head1 SEE ALSO
 
 =over
 
-=item L<Uc::IrcGateway>
+=item Uc::IrcGateway L<https://github.com/UCormorant/p5-uc-ircgateway>
 
 =back
 
 
-=head1 AUTHOR
-
-U=Cormorant  C<< <u@chimata.org> >>
-
-
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2011-2013, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
+Copyright (C) 2011-2013, U=Cormorant. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
+
+=cut

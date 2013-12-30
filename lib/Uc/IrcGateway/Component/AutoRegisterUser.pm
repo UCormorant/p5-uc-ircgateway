@@ -1,11 +1,9 @@
-package Uc::IrcGateway::Plugin::AutoRegisterUser;
+package Uc::IrcGateway::Component::AutoRegisterUser;
 use 5.014;
-use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
 use Scalar::Util qw(refaddr);
 
-sub register_user :Method {
-    my $plugin = shift;
+sub register_user {
     my $self = shift;
     my ($handle, $user) = @_;
     return 1 if $user->isa('Uc::IrcGateway::User');

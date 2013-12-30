@@ -1,13 +1,12 @@
-package Uc::IrcGateway::Plugin::CustomRegisterUser;
+package Uc::IrcGateway::Component::CustomRegisterUser;
 use 5.014;
-use parent 'Class::Component::Plugin';
 use Uc::IrcGateway::Common;
-use Carp qw(croak);
+use Carp qw(confess);
 
-sub init {
+sub class_component_load_component_init {
     my ($plugin, $class) = @_;
-    my $classname = ref $class;
-    croak "$classname must have 'register_user' method. you need to define 'sub register_user' in package '$classname'"
+    my $classname = ref $class ? ref $class : $class;
+    confess "$classname must have 'register_user' method. you need to define 'sub register_user' in package '$classname'"
         . <<'_CROAK_' unless $class->can('register_user');
 
 

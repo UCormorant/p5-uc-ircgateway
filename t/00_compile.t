@@ -17,9 +17,10 @@ use_ok $_ for qw(
     Uc::IrcGateway::Attribute::CtcpEvent
     Uc::IrcGateway::Attribute::IrcEvent
 
+    Uc::IrcGateway::Component::AutoRegisterUser
+    Uc::IrcGateway::Component::CustomRegisterUser
+
     Uc::IrcGateway::Plugin::DefaultSet
-    Uc::IrcGateway::Plugin::AutoRegisterUser
-    Uc::IrcGateway::Plugin::CustomRegisterUser
 
     Uc::IrcGateway::Plugin::Ctcp::Action
     Uc::IrcGateway::Plugin::Ctcp::ClientInfo

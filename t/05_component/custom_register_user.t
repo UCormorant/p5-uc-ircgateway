@@ -6,15 +6,14 @@ use Test::Difflet qw(is_deeply);
 
 use t::Util;
 use Uc::IrcGateway;
-Uc::IrcGateway->load_plugins(qw/DefaultSet CustomRegisterUser/);
 
 no strict 'refs';
 
-eval { new_ircd('Uc::IrcGateway'); };
+eval { Uc::IrcGateway->load_components(qw/CustomRegisterUser/); };
 ok $@, 'dies when register_user method is not defined';
 
 *{'Uc::IrcGateway::register_user'} = sub {};
-eval { new_ircd('Uc::IrcGateway'); };
+eval { Uc::IrcGateway->load_components(qw/CustomRegisterUser/); };
 ok !$@, 'lives when register_user method is defined'; diag $@;
 
 done_testing;

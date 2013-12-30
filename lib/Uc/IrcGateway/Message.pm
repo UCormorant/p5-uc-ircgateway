@@ -1572,7 +1572,7 @@ ERR_USERSDONTMATCH: |+
 
 __END__
 
-=encoding utf8
+=encoding utf-8
 
 =head1 NAME
 
@@ -1596,23 +1596,25 @@ Please report any bugs or feature requests to
 L<https://github.com/UCormorant/p5-uc-ircgateway/issues>
 
 
+=head1 AUTHOR
+
+U=Cormorant E<lt>u@chimata.orgE<gt>
+
+
 =head1 SEE ALSO
 
 =over
 
-=item L<Uc::IrcGateway>
+=item Uc::IrcGateway L<https://github.com/UCormorant/p5-uc-ircgateway>
 
 =back
 
 
-=head1 AUTHOR
-
-U=Cormorant  C<< <u@chimata.org> >>
-
-
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2011, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
+Copyright (C) 2011-2013, U=Cormorant. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
+
+=cut

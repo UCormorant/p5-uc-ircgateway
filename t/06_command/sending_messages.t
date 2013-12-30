@@ -8,7 +8,8 @@ use Test::Difflet qw(is_deeply);
 use t::Util;
 use Uc::IrcGateway;
 use Uc::IrcGateway::Common;
-Uc::IrcGateway->load_plugins(qw/DefaultSet AutoRegisterUser/);
+Uc::IrcGateway->load_components(qw/AutoRegisterUser/);
+Uc::IrcGateway->load_plugins(qw/DefaultSet/);
 Uc::IrcGateway->load_plugins(qw/+Mock::Plugin::SendingMessages/);
 
 use AnyEvent::IRC::Client ();

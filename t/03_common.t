@@ -70,7 +70,13 @@ subtest 'to_json' => sub {
 \s+"three" : "four"|"three" : "four",
 \s+"one" : "two")
 }!, 'to_json');
-    is(to_json(+{ 1 => 2, 3 => 4 }, pretty => 0), '{"1":2,"3":4}', 'option');
+
+    is(to_json(+{ 1 => 2, 3 => 4 }, pretty => 0, allow_blessed => 0), '{"1":2,"3":4}', 'option');
+    like(to_json(+{ 1 => 2, 3 => 4 }), qr!{
+\s+(?:"1" : 2,
+\s+"3" : 4|"3" : 4,
+\s+"1" : 2)
+}!, 'option not breaks common parser');
 };
 
 subtest 'from_json' => sub {

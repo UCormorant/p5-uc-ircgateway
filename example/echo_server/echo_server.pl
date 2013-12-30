@@ -1,9 +1,12 @@
-#!/usr/local/bin/perl
+#!/usr/bin/env perl
 
 use 5.014;
 use common::sense;
 use warnings qw(utf8);
-use lib qw(../../lib);
+
+use File::Spec;
+use File::Basename;
+use lib File::Spec->catdir(dirname(__FILE__), '..', '..', 'lib');
 
 package EchoServer {
     no thanks;
@@ -14,9 +17,9 @@ package EchoServer {
     use warnings qw(utf8);
 
     use parent 'Uc::IrcGateway';
+    __PACKAGE__->load_components(qw/AutoRegisterUser/);
     __PACKAGE__->load_plugins(qw/
         DefaultSet
-        AutoRegisterUser
         Log::Notice4Handle
         Echo
     /);
@@ -48,7 +51,7 @@ dlock my $CHARSET = ($^O eq 'MSWin32' ? 'cp932' : 'utf8');
 binmode STDIN  => ":encoding($CHARSET)";
 binmode STDOUT => ":encoding($CHARSET)";
 
-use opts;
+use Smart::Options::Declare;
 
 local $| = 1;
 

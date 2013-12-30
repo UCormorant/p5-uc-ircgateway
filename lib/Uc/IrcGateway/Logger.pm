@@ -6,19 +6,11 @@ use utf8;
 
 use parent qw(Log::Dispatch);
 
-our %LOG_LEVEL = ();
-sub log_level { \%LOG_LEVEL }
-sub add_log_level {
-    my ($self, $level, $code) = @_;
-    $self->log_level->{$level} = [] if not exists $self->log_level->{$level};
-    push $self->log_level->{$level}, $code;
-}
-
 sub new {
     my $class = shift;
     my $self = $class->SUPER::new(@_);
-    $self->{on_destroy} = +[];
     $self->{log_level}  = +{};
+    $self->{on_destroy} = +[];
     $self;
 }
 
@@ -43,6 +35,13 @@ sub log_and_die {
     $self->SUPER::log_and_die(level => $level, message => $message, carp_level => 3);
 }
 
+sub log_level { $_[0]->{log_level} }
+sub add_log_level {
+    my ($self, $level, $code) = @_;
+    $self->log_level->{$level} = [] if not exists $self->log_level->{$level};
+    push $self->log_level->{$level}, $code;
+}
+
 sub on_destroy {
     my ($self, $code) = @_;
     if ($code) {
@@ -61,7 +60,7 @@ sub DESTROY {
 1; # Magic true value required at end of module
 __END__
 
-=encoding utf8
+=encoding utf-8
 
 =head1 NAME
 
@@ -85,23 +84,25 @@ Please report any bugs or feature requests to
 L<https://github.com/UCormorant/p5-uc-ircgateway/issues>
 
 
+=head1 AUTHOR
+
+U=Cormorant E<lt>u@chimata.orgE<gt>
+
+
 =head1 SEE ALSO
 
 =over
 
-=item L<Uc::IrcGateway>
+=item Uc::IrcGateway L<https://github.com/UCormorant/p5-uc-ircgateway>
 
 =back
 
 
-=head1 AUTHOR
-
-U=Cormorant  C<< <u@chimata.org> >>
-
-
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2011, U=Cormorant C<< <u@chimata.org> >>. All rights reserved.
+Copyright (C) 2011-2013, U=Cormorant. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
+
+=cut

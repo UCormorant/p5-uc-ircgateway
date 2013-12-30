@@ -1,8 +1,7 @@
-package Uc::IrcGateway v3.1.2;
+package Uc::IrcGateway v3.1.3;
 use 5.014;
 use parent qw(Class::Component Object::Event);
 use Uc::IrcGateway::Common;
-__PACKAGE__->load_components(qw/Autocall::Autoload/);
 
 use AnyEvent::Socket qw(tcp_server);
 use Carp qw(carp croak);
@@ -114,7 +113,7 @@ sub new {
 
         if ($self->condvar) {
             $self->logger->log(emerg => $message);
-            $self->condvar->send;
+            $self->condvar->croak($message);
         }
         else {
             $self->logger->log_and_die(emerg => $message);
@@ -514,14 +513,15 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version v3.1.2
+This document describes Uc::IrcGateway version v3.1.3
 
 
 =head1 SYNOPSIS
 
     package MyIrcGateway;
     use parent qw(Uc::IrcGateway);
-    __PACKAGE__->load_plugins(qw/DefaultSet AutoRegisterUser/);
+    __PACKAGE__->load_components(qw/AutoRegisterUser/);
+    __PACKAGE__->load_plugins(qw/DefaultSet/);
 
     package main;
 
@@ -564,7 +564,9 @@ U=Cormorant E<lt>u@chimata.orgE<gt>
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2011-2013, U=Cormorant. All rights reserved.
+Copyright (C) 2011-2013, U=Cormorant. All rights reserved.
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
+
+=cut
