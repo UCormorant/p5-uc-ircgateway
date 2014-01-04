@@ -45,6 +45,8 @@ sub new {
 
     $self->schema->setup_database;
 
+    $self->{_channel_cache} = +{};
+
     $self;
 }
 
@@ -110,32 +112,44 @@ sub set_channels {
     $self->schema->bulk_insert('channel', \@insert_multi);
 }
 
-my %CHANNEL_CACHE;
 sub get_channels {
     local $_;
     my $self = shift;
     my $method = wantarray ? 'search' : 'single';
-    my @cache;
+    my @cache = ();
     my @names = map {
-        if (exists $CHANNEL_CACHE{$_}) { push @cache, $CHANNEL_CACHE{$_}; (); }
-        else                           { ($_); }
+        if (exists $self->{_channel_cache}{$_}) { push @cache, $self->{_channel_cache}{$_}; (); }
+        else                                    { ($_); }
     } @_;
-    my @result = $self->schema->$method('channel', +{ name => \@names });
-    return @cache if scalar @result && defined $result[0];
-    map { $CHANNEL_CACHE{$_->name} = $_ } @result;
-    return (@cache, @result);
+    my @result = ();
+    @result = $self->schema->$method('channel', +{ name => \@names }) if scalar @names;
+
+    unless (scalar @result && defined $result[0]) {
+        # channels are all cached
+        return wantarray ? @cache : $cache[0];
+    }
+
+    # register cache
+    map { $self->{_channel_cache}{$_->name} = $_ } @result;
+
+    @result = (@cache, @result);
+    wantarray ? @result : $result[0];
 }
 
 sub del_chnnels {
     my $self = shift;
-    map { delete $CHANNEL_CACHE{$_} } @_;
+    map { delete $self->{_channel_cache}{$_} } @_;
     $self->schema->delete('channel', +{ name => \@_ });
 }
 
 sub has_channel {
     my ($self, $c_name) = @_;
-    return 1 if exists $CHANNEL_CACHE{$c_name};
-    $self->schema->single('channel', +{ name => $c_name }) ? 1 : 0;
+    return 1 if exists $self->{_channel_cache}{$c_name};
+    if (my $result = $self->schema->single('channel', +{ name => $c_name })) {
+        $self->{_channel_cache}{$result->name} = $result;
+        return 1;
+    }
+    return 0;
 }
 
 sub channel_list {
