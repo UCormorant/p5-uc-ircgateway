@@ -110,19 +110,31 @@ sub set_channels {
     $self->schema->bulk_insert('channel', \@insert_multi);
 }
 
+my %CHANNEL_CACHE;
 sub get_channels {
+    local $_;
     my $self = shift;
     my $method = wantarray ? 'search' : 'single';
-    $self->schema->$method('channel', +{ name => \@_ });
+    my @cache;
+    my @names = map {
+        if (exists $CHANNEL_CACHE{$_}) { push @cache, $CHANNEL_CACHE{$_}; (); }
+        else                           { ($_); }
+    } @_;
+    my @result = $self->schema->$method('channel', +{ name => \@names });
+    return @cache if scalar @result && defined $result[0];
+    map { $CHANNEL_CACHE{$_->name} = $_ } @result;
+    return (@cache, @result);
 }
 
 sub del_chnnels {
     my $self = shift;
+    map { delete $CHANNEL_CACHE{$_} } @_;
     $self->schema->delete('channel', +{ name => \@_ });
 }
 
 sub has_channel {
     my ($self, $c_name) = @_;
+    return 1 if exists $CHANNEL_CACHE{$c_name};
     $self->schema->single('channel', +{ name => $c_name }) ? 1 : 0;
 }
 

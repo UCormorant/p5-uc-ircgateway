@@ -33,7 +33,8 @@ sub users { # has_many
     my @logins = $self->login_list(@_);
     my $sql = sprintf q{SELECT * FROM user WHERE login IN (%s)}, join ',', map { sprintf "'%s'", s/'/\\'/gr; } @logins;
     if (wantarray) {
-        return grep { defined } $self->{teng}->search_by_sql($sql);
+        my @result = $self->{teng}->search_by_sql($sql);
+        (scalar @result && defined $result[0]) ? @result : ();
     }
     else {
         return $self->{teng}->search_by_sql($sql);
