@@ -2,6 +2,16 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.1.5 2014-01-04T00:52:19Z
+
+    - add cache logic for channels:
+
+        - get_channels, del_channels and has_channel use cached object
+
+    - fixed code of removing undef item in "Channel->get_users".
+
+    - add Build.bat in .gitignore for Windows.
+
 v3.1.4 2013-12-30T21:25:55Z
 
     bugfix: these DBI options are not enabled: RaiseError, PrintError, AutoCommit

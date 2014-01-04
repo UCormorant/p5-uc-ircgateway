@@ -513,7 +513,7 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 =head1 VERSION
 
-This document describes Uc::IrcGateway version v3.1.4
+This document describes Uc::IrcGateway version v3.1.5
 
 
 =head1 SYNOPSIS

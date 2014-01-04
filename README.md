@@ -6,7 +6,7 @@ Uc::IrcGateway - プラガブルなオレオレIRCゲートウェイ基底クラ
 
 # VERSION
 
-This document describes Uc::IrcGateway version v3.1.4
+This document describes Uc::IrcGateway version v3.1.5
 
 
 
