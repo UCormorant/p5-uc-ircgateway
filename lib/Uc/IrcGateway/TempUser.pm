@@ -7,6 +7,7 @@ use utf8;
 use Carp qw(croak);
 use Path::Class qw(file);
 use Uc::IrcGateway::Structure;
+use AnyEvent;
 
 our %MODE_TABLE;
 our @USER_PROP;
@@ -51,8 +52,18 @@ sub register {
 
     my $db = file($handle->ircd->app_dir, sprintf "%s.sqlite", $self->login);
     my $exists_db = -e $db;
-    $handle->schema->{dbh} = setup_dbh($db);
-    $handle->schema->setup_database if not $exists_db;
+    if ($handle->options->{in_memory}) {
+        $handle->schema->{dbh}->sqlite_backup_from_file($db) if $exists_db;
+        # backup timer
+        $handle->{_guard_backup_db} = AnyEvent->timer(after => 1*60, interval => 1*60, cb => sub{
+            $handle->ircd->log($handle, debug => 'database backup');
+            $handle->schema->{dbh}->sqlite_backup_to_file($db);
+        });
+    }
+    else {
+        $handle->schema->{dbh} = setup_dbh($db);
+        $handle->schema->setup_database if not $exists_db;
+    }
 
     my $user;
     if ($user = $handle->get_users($self->login)) {
