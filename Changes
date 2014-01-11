@@ -2,6 +2,16 @@ Revision history for Perl extension Uc-IrcGateway
 
 {{$NEXT}}
 
+v3.1.6 2014-01-11T17:59:39Z
+
+    - trial option: in_memory
+
+        - if $handle->options->{in_memory} is true,
+          dbh uses :memory: as database in register user phase.
+          in addition, all in database are backed up to file.
+
+    - remove channels cache logic.
+
 v3.1.5 2014-01-04T00:52:19Z
 
     - add cache logic for channels:
